@@ -247,7 +247,7 @@ function switchEl(id) {
 }
 
 let poolMode = 'sample';
-let costOn = () => true, cacheOn = () => true;
+let costOn = () => true, cacheOn = () => true, fundOn = () => true;
 
 function readParams() {
   return {
@@ -263,6 +263,7 @@ function readParams() {
     threshold: +$('#threshold').value || 0,
     cost: costOn(),
     use_cache: cacheOn(),
+    fundamentals: fundOn(),
   };
 }
 
@@ -875,6 +876,7 @@ function init() {
   $('#rankOnlyTop').addEventListener('change', renderRanking);
   costOn = switchEl('#swCost');
   cacheOn = switchEl('#swCache');
+  fundOn = switchEl('#swFund');
   $('#run').addEventListener('click', startRun);
   $('#runStress').addEventListener('click', startStress);
   $('#btnHistory').addEventListener('click', openHistory);

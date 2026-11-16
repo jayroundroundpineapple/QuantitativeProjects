@@ -1,0 +1,341 @@
+{
+ "job_id": "20261116-162756-b3e0",
+ "kind": "run",
+ "params": {
+  "pool": "sample",
+  "n": 100,
+  "codes": "",
+  "start": "2021-01-01",
+  "end": "2026-11-16",
+  "top": 20,
+  "mode": "both",
+  "seed": 42,
+  "capital": 1000000.0,
+  "threshold": 0.0,
+  "cost": true,
+  "use_cache": true,
+  "fundamentals": false
+ },
+ "finished": "2026-11-16T16:27:58",
+ "metrics": {
+  "factor": {
+   "start": null,
+   "end": null,
+   "years": 4.95,
+   "total_return": 0.6804,
+   "cagr": 0.1106,
+   "ann_vol": 0.27,
+   "sharpe": 0.409,
+   "max_dd": -0.2862,
+   "calmar": 0.386,
+   "monthly_win": 0.6102,
+   "turnover_annual": 3.1,
+   "avg_holdings": 19.0,
+   "bench_cagr": 0.0015,
+   "excess_cagr": 0.1091,
+   "bench_max_dd": -0.3141,
+   "ic_mean": 0.0219,
+   "ic_std": 0.1628,
+   "icir": 0.135,
+   "ic_win": 0.5833
+  },
+  "rotation": {
+   "start": null,
+   "end": null,
+   "years": 4.95,
+   "total_return": 2.1257,
+   "cagr": 0.2589,
+   "ann_vol": 0.2949,
+   "sharpe": 0.878,
+   "max_dd": -0.3214,
+   "calmar": 0.805,
+   "monthly_win": 0.661,
+   "turnover_annual": 4.2,
+   "avg_holdings": 13.0,
+   "bench_cagr": 0.0015,
+   "excess_cagr": 0.2574,
+   "bench_max_dd": -0.3141,
+   "ic_mean": 0.0219,
+   "ic_std": 0.1628,
+   "icir": 0.135,
+   "ic_win": 0.5833
+  },
+  "sector_only": {
+   "start": null,
+   "end": null,
+   "years": 4.95,
+   "total_return": 1.139,
+   "cagr": 0.166,
+   "ann_vol": 0.3263,
+   "sharpe": 0.509,
+   "max_dd": -0.4137,
+   "calmar": 0.401,
+   "monthly_win": 0.5424,
+   "turnover_annual": 0.3,
+   "avg_holdings": 3.0,
+   "bench_cagr": 0.0028,
+   "excess_cagr": 0.1632,
+   "bench_max_dd": -0.3764
+  }
+ },
+ "pool": {
+  "count": 100,
+  "codes": [
+   "000735",
+   "000922",
+   "000958",
+   "001221",
+   "001306",
+   "001330",
+   "001376",
+   "001388",
+   "002011",
+   "002028",
+   "002186",
+   "002205",
+   "002350",
+   "002390",
+   "002408",
+   "002518",
+   "002570",
+   "002595",
+   "002631",
+   "002806",
+   "002818",
+   "002900",
+   "300063",
+   "300158",
+   "300304",
+   "300386",
+   "300416",
+   "300546",
+   "300602",
+   "300621"
+  ],
+  "kind": "sample",
+  "label": "随机抽样 100 只",
+  "first": "2021-01-04",
+  "last": "2026-11-13",
+  "days": 1420
+ },
+ "stats": null,
+ "ranking_head": [
+  {
+   "rank": 1,
+   "code": "002011",
+   "name": "—",
+   "industry": "—",
+   "score": 2.223,
+   "value": 0.97,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.854,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 2,
+   "code": "002818",
+   "name": "—",
+   "industry": "—",
+   "score": 1.992,
+   "value": 0.924,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.812,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 3,
+   "code": "600312",
+   "name": "—",
+   "industry": "—",
+   "score": 1.929,
+   "value": 0.848,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.896,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 4,
+   "code": "688036",
+   "name": "—",
+   "industry": "—",
+   "score": 1.656,
+   "value": 0.727,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.948,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 5,
+   "code": "000958",
+   "name": "—",
+   "industry": "—",
+   "score": 1.529,
+   "value": 0.909,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.615,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 6,
+   "code": "920220",
+   "name": "—",
+   "industry": "—",
+   "score": 1.344,
+   "value": 0.621,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.958,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 7,
+   "code": "920017",
+   "name": "—",
+   "industry": "—",
+   "score": 1.318,
+   "value": 0.939,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.469,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 8,
+   "code": "600345",
+   "name": "—",
+   "industry": "—",
+   "score": 1.177,
+   "value": 0.985,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.333,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 9,
+   "code": "603409",
+   "name": "—",
+   "industry": "—",
+   "score": 1.123,
+   "value": 0.864,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.49,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 10,
+   "code": "603583",
+   "name": "—",
+   "industry": "—",
+   "score": 1.074,
+   "value": 0.591,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.875,
+   "selected": true,
+   "held": false
+  }
+ ],
+ "ranking_meta": {
+  "total": 100,
+  "eligible": 59,
+  "live": [
+   "value",
+   "momentum"
+  ],
+  "label": null
+ },
+ "sources": [
+  {
+   "k": "行情",
+   "src": "腾讯财经 stock_zh_a_hist_tx",
+   "freq": "日线 · 前复权",
+   "asof": "2026-11-13",
+   "note": "100 只 × 1420 个交易日；源端收盘后要 1–2 小时才发布当日 K 线，所以「今天收盘」之后立刻跑，最后一根可能还是上一个交易日"
+  },
+  {
+   "k": "估值",
+   "src": "百度股市通 stock_zh_valuation_baidu",
+   "freq": "每日 PE(TTM)",
+   "asof": "2026-11-13",
+   "note": "滚动 12 个月口径，按交易日对齐到行情"
+  },
+  {
+   "k": "财报",
+   "src": "东方财富 业绩报表 stock_yjbb_em",
+   "freq": "季度",
+   "asof": "—",
+   "note": "本次未取到财报，质量/成长因子未参与打分"
+  },
+  {
+   "k": "退市",
+   "src": "上交所 / 深交所 暂停终止上市名单",
+   "freq": "按需",
+   "asof": "2026-11-16",
+   "note": "只用于估算存活偏差，不进入选股样本"
+  }
+ ],
+ "bias": {
+  "sample": 100,
+  "listed_after_start": 36,
+  "delisted_in_period": 228,
+  "universe_size": 5579,
+  "delist_rate_pct": 3.93,
+  "bias_pp_per_year": 0.57,
+  "years": 5.87,
+  "note": "上交所/深交所「暂停、终止上市」口径，属上限估计"
+ },
+ "caveats": [
+  {
+   "level": "warn",
+   "title": "IC 落在噪声区间",
+   "text": "IC = 0.022，而 100 只样本的 IC 标准误约 1/√100 = 0.10。两者不可区分，这条选股信号在统计上与随机排序无异。"
+  },
+  {
+   "level": "warn",
+   "title": "样本太小，收益不可外推",
+   "text": "当前只用 100 只股票。换一个随机种子重跑，年化收益会明显变化——这正是「抽样运气」而非「策略能力」的证据。"
+  },
+  {
+   "level": "warn",
+   "title": "轮动只有 3 只标的，无法做显著性检验",
+   "text": "3 家 × 约 60 个月 × 1 个阈值，看不出是方法有效还是这个板块恰好走强。换到半导体或有色可能完全不成立。"
+  },
+  {
+   "level": "warn",
+   "title": "存在存活偏差，基准被高估",
+   "text": "样本中 36 只是回测区间内才上市的，区间外退市的股票一只都取不到；按现有口径基准年化约虚高 0.57 个百分点（下限）。"
+  },
+  {
+   "level": "warn",
+   "title": "有因子没接入，权重只落在剩下的上面",
+   "text": "实际在工作的只有 价值(1/PE)、动量(60日)；质量(ROE)、成长(净利同比) 缺数据，已按「未接入」处理并把权重让给其余因子。"
+  },
+  {
+   "level": "info",
+   "title": "回测 ≠ 未来",
+   "text": "引擎已按 T+1 开盘成交、涨跌停拦截、双边成本计算，但仍无法模拟冲击成本、分红除权差异与真实成交队列。实盘收益通常低于回测。"
+  }
+ ],
+ "files": [
+  "nav.csv",
+  "trades.csv",
+  "holdings.csv",
+  "ranking.csv"
+ ]
+}

@@ -1,0 +1,298 @@
+{
+ "job_id": "20261116-162816-8b2f",
+ "kind": "run",
+ "params": {
+  "pool": "sample",
+  "n": 100,
+  "codes": "",
+  "start": "2021-01-01",
+  "end": "2026-11-16",
+  "top": 20,
+  "mode": "factor",
+  "seed": 42,
+  "capital": 1000000.0,
+  "threshold": 0.0,
+  "cost": true,
+  "use_cache": true,
+  "fundamentals": false
+ },
+ "finished": "2026-11-16T16:28:17",
+ "metrics": {
+  "factor": {
+   "start": null,
+   "end": null,
+   "years": 4.95,
+   "total_return": 0.2358,
+   "cagr": 0.0437,
+   "ann_vol": 0.2577,
+   "sharpe": 0.17,
+   "max_dd": -0.3611,
+   "calmar": 0.121,
+   "monthly_win": 0.5593,
+   "turnover_annual": 2.93,
+   "avg_holdings": 19.0,
+   "bench_cagr": 0.0024,
+   "excess_cagr": 0.0413,
+   "bench_max_dd": -0.3213,
+   "ic_mean": 0.0082,
+   "ic_std": 0.1846,
+   "icir": 0.045,
+   "ic_win": 0.5333
+  }
+ },
+ "pool": {
+  "count": 100,
+  "codes": [
+   "000735",
+   "000922",
+   "000957",
+   "001221",
+   "001306",
+   "001330",
+   "001373",
+   "001388",
+   "002011",
+   "002186",
+   "002204",
+   "002269",
+   "002350",
+   "002390",
+   "002407",
+   "002517",
+   "002568",
+   "002595",
+   "002631",
+   "002805",
+   "002817",
+   "002899",
+   "300062",
+   "300157",
+   "300303",
+   "300384",
+   "300415",
+   "300545",
+   "300601",
+   "300620"
+  ],
+  "kind": "sample",
+  "label": "随机抽样 100 只",
+  "first": "2021-01-04",
+  "last": "2026-11-13",
+  "days": 1420
+ },
+ "stats": null,
+ "ranking_head": [
+  {
+   "rank": 1,
+   "code": "002011",
+   "name": "—",
+   "industry": "—",
+   "score": 1.934,
+   "value": 0.917,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.86,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 2,
+   "code": "603680",
+   "name": "—",
+   "industry": "—",
+   "score": 1.774,
+   "value": 0.889,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.82,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 3,
+   "code": "301061",
+   "name": "—",
+   "industry": "—",
+   "score": 1.681,
+   "value": 0.764,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.96,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 4,
+   "code": "601901",
+   "name": "—",
+   "industry": "—",
+   "score": 1.635,
+   "value": 0.875,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.77,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 5,
+   "code": "601877",
+   "name": "—",
+   "industry": "—",
+   "score": 1.524,
+   "value": 0.931,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.63,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 6,
+   "code": "601336",
+   "name": "—",
+   "industry": "—",
+   "score": 1.453,
+   "value": 1.0,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.49,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 7,
+   "code": "000957",
+   "name": "—",
+   "industry": "—",
+   "score": 1.245,
+   "value": 0.903,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.53,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 8,
+   "code": "603013",
+   "name": "—",
+   "industry": "—",
+   "score": 1.121,
+   "value": 0.847,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.55,
+   "selected": true,
+   "held": false
+  },
+  {
+   "rank": 9,
+   "code": "002517",
+   "name": "—",
+   "industry": "—",
+   "score": 1.098,
+   "value": 0.819,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.58,
+   "selected": true,
+   "held": true
+  },
+  {
+   "rank": 10,
+   "code": "603901",
+   "name": "—",
+   "industry": "—",
+   "score": 1.051,
+   "value": 0.583,
+   "quality": null,
+   "growth": null,
+   "momentum": 0.91,
+   "selected": true,
+   "held": true
+  }
+ ],
+ "ranking_meta": {
+  "total": 100,
+  "eligible": 69,
+  "live": [
+   "value",
+   "momentum"
+  ],
+  "label": null
+ },
+ "sources": [
+  {
+   "k": "行情",
+   "src": "腾讯财经 stock_zh_a_hist_tx",
+   "freq": "日线 · 前复权",
+   "asof": "2026-11-13",
+   "note": "100 只 × 1420 个交易日；源端收盘后要 1–2 小时才发布当日 K 线，所以「今天收盘」之后立刻跑，最后一根可能还是上一个交易日"
+  },
+  {
+   "k": "估值",
+   "src": "百度股市通 stock_zh_valuation_baidu",
+   "freq": "每日 PE(TTM)",
+   "asof": "2026-11-13",
+   "note": "滚动 12 个月口径，按交易日对齐到行情"
+  },
+  {
+   "k": "财报",
+   "src": "东方财富 业绩报表 stock_yjbb_em",
+   "freq": "季度",
+   "asof": "—",
+   "note": "本次未取到财报，质量/成长因子未参与打分"
+  },
+  {
+   "k": "退市",
+   "src": "上交所 / 深交所 暂停终止上市名单",
+   "freq": "按需",
+   "asof": "2026-11-16",
+   "note": "只用于估算存活偏差，不进入选股样本"
+  }
+ ],
+ "bias": {
+  "sample": 100,
+  "listed_after_start": 38,
+  "delisted_in_period": 228,
+  "universe_size": 5579,
+  "delist_rate_pct": 3.93,
+  "bias_pp_per_year": 0.57,
+  "years": 5.87,
+  "note": "上交所/深交所「暂停、终止上市」口径，属上限估计"
+ },
+ "caveats": [
+  {
+   "level": "warn",
+   "title": "IC 落在噪声区间",
+   "text": "IC = 0.008，而 100 只样本的 IC 标准误约 1/√100 = 0.10。两者不可区分，这条选股信号在统计上与随机排序无异。"
+  },
+  {
+   "level": "warn",
+   "title": "样本太小，收益不可外推",
+   "text": "当前只用 100 只股票。换一个随机种子重跑，年化收益会明显变化——这正是「抽样运气」而非「策略能力」的证据。"
+  },
+  {
+   "level": "warn",
+   "title": "存在存活偏差，基准被高估",
+   "text": "样本中 38 只是回测区间内才上市的，区间外退市的股票一只都取不到；按现有口径基准年化约虚高 0.57 个百分点（下限）。"
+  },
+  {
+   "level": "warn",
+   "title": "有因子没接入，权重只落在剩下的上面",
+   "text": "实际在工作的只有 价值(1/PE)、动量(60日)；质量(ROE)、成长(净利同比) 缺数据，已按「未接入」处理并把权重让给其余因子。"
+  },
+  {
+   "level": "info",
+   "title": "回测 ≠ 未来",
+   "text": "引擎已按 T+1 开盘成交、涨跌停拦截、双边成本计算，但仍无法模拟冲击成本、分红除权差异与真实成交队列。实盘收益通常低于回测。"
+  }
+ ],
+ "files": [
+  "nav.csv",
+  "trades.csv",
+  "holdings.csv",
+  "ranking.csv"
+ ]
+}

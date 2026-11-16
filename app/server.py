@@ -387,16 +387,21 @@ def pipeline(p: dict, job: Job) -> dict:
         progress=lambda i, n: job.quiet(46 + 8 * i / max(n, 1), f"拉取估值 {i}/{n}"))
     job.log(f"估值：{len(pe):,} 条 PE-TTM 记录，覆盖 {pe['code'].nunique()} 只")
 
-    job.bump(55, "拉取财报（东财业绩报表，首次 1–2 分钟）")
-    try:
-        fin = rd.fetch_fundamentals(
-            codes, str(close.index[0].date()), str(close.index[-1].date()),
-            use_cache=bool(p.get("use_cache", True)),
-            progress=lambda i, n, period: job.quiet(
-                55 + 9 * i / max(n, 1), f"拉取财报 {period}（{i}/{n} 期）"))
-    except Exception as e:                     # 财报失败不该让整个回测挂掉
+    if p.get("fundamentals", True) is False:
         fin = None
-        job.log(f"财报获取失败（{type(e).__name__}），质量/成长因子按未接入处理")
+        job.bump(64, "跳过财报（按两因子模式跑）")
+        job.log("已关闭财报因子：只保留价值 + 动量，质量/成长按未接入处理")
+    else:
+        job.bump(55, "拉取财报（东财业绩报表，首次 1–2 分钟）")
+        try:
+            fin = rd.fetch_fundamentals(
+                codes, str(close.index[0].date()), str(close.index[-1].date()),
+                use_cache=bool(p.get("use_cache", True)),
+                progress=lambda i, n, period: job.quiet(
+                    55 + 9 * i / max(n, 1), f"拉取财报 {period}（{i}/{n} 期）"))
+        except Exception as e:                 # 财报失败不该让整个回测挂掉
+            fin = None
+            job.log(f"财报获取失败（{type(e).__name__}），质量/成长因子按未接入处理")
     panel = rd.to_panel(prices, pe, fin)
     meta = panel.get("fin_meta") or {}
     if fin is not None and len(fin):
@@ -603,13 +608,17 @@ def stress_pipeline(p: dict, job: Job) -> dict:
     pe = rd.fetch_pe(codes, use_cache=bool(p.get("use_cache", True)),
                      progress=lambda i, m: job.quiet(52 + 8 * i / max(m, 1), f"拉取估值 {i}/{m}"))
     job.bump(61, "拉取财报")
-    try:
-        fin = rd.fetch_fundamentals(codes, start, end, use_cache=bool(p.get("use_cache", True)),
-                                    progress=lambda i, m, period: job.quiet(
-                                        61 + 8 * i / max(m, 1), f"拉取财报 {period}"))
-    except Exception as e:
+    if p.get("fundamentals", True) is False:
         fin = None
-        job.log(f"财报获取失败（{type(e).__name__}），本次只用价值+动量因子")
+        job.log("已关闭财报因子：本次只用价值 + 动量")
+    else:
+        try:
+            fin = rd.fetch_fundamentals(codes, start, end, use_cache=bool(p.get("use_cache", True)),
+                                        progress=lambda i, m, period: job.quiet(
+                                            61 + 8 * i / max(m, 1), f"拉取财报 {period}"))
+        except Exception as e:
+            fin = None
+            job.log(f"财报获取失败（{type(e).__name__}），本次只用价值+动量因子")
     panel = rd.to_panel(prices, pe, fin)
 
     cfg0 = Config(top_n=top, capital=float(p.get("capital", 1_000_000)),
@@ -883,6 +892,7 @@ def _normalize(b: dict) -> dict:
         "threshold": float(b.get("threshold", 0.0)),
         "cost": bool(b.get("cost", True)),
         "use_cache": bool(b.get("use_cache", True)),
+        "fundamentals": bool(b.get("fundamentals", True)),
     }
     p["n"] = max(5, min(p["n"], 800))
     p["top"] = max(1, min(p["top"], 100))

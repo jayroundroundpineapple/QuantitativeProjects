@@ -66,6 +66,10 @@
       <label>执行假设</label>
       <div class="switch on" id="swCost"><span>计入交易成本</span><i></i></div>
       <div class="switch on" id="swCache"><span>复用本地缓存</span><i></i></div>
+      <div class="switch on" id="swFund"><span>财报因子（ROE / 净利同比）</span><i></i></div>
+      <div class="mini" style="margin-top:-4px;margin-bottom:6px">
+        关掉就只剩价值 + 动量，用于和四因子做同池对照
+      </div>
       <div>
         <input type="number" id="capital" value="1000000" step="100000">
         <div class="mini">初始资金（A 股一手 100 股，太小会买不进）</div>
