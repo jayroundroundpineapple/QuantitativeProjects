@@ -247,6 +247,7 @@ function switchEl(id) {
 }
 
 let poolMode = 'sample';
+let modeSel = 'both';
 let costOn = () => true, cacheOn = () => true, fundOn = () => true;
 
 function readParams() {
@@ -257,7 +258,7 @@ function readParams() {
     start: $('#start').value,
     end: $('#end').value || new Date().toISOString().slice(0, 10),
     top: +$('#top').value || 20,
-    mode: $('#segMode .on').dataset.v,
+    mode: modeSel,
     seed: +$('#seed').value || 42,
     capital: +$('#capital').value || 1000000,
     threshold: +$('#threshold').value || 0,
@@ -834,6 +835,14 @@ async function loadHistory(id) {
   }
   state.jobId = id;
   state.data = st.result;
+  // 载入历史时把左侧策略开关同步过去，否则面板显示和实际跑的不是一回事
+  const pm = (st.params || {}).mode;
+  if (pm && pm !== modeSel) {
+    modeSel = pm;
+    $$('#segMode button').forEach(b => b.classList.toggle('on', b.dataset.v === pm));
+    updateModeHint();
+    updatePoolHint();
+  }
   render(st.result);
   const t = new URLSearchParams(location.search).get('tab');
   if (t) showTab(t);
@@ -841,12 +850,27 @@ async function loadHistory(id) {
 }
 
 /* ------------------------------------------------------------ 初始化 */
+const MODE_HINT = {
+  factor: '每次调仓按四因子打分选前 N 只，始终满仓。',
+  rotation: '每个调仓日看强度分：> 阈值持电网三只，≤ 阈值交回多因子。',
+  both: '三条线一起跑（多因子 / 轮动 / 死拿三只）只做对比，不会合并成一个组合。',
+};
+
+function updateModeHint() {
+  const el = $('#modeHint');
+  if (el) el.textContent = MODE_HINT[modeSel] || '';
+}
+
 function updatePoolHint() {
   const el = $('#poolHint');
   let txt = '', warn = false;
   if (poolMode === 'sample') {
     const n = parseInt($('#n').value, 10) || 0;
-    txt = `从当前全部 A 股中按种子抽样 ${n} 只，含存活偏差`;
+    if (modeSel === 'factor') {
+      txt = `从当前全部 A 股中按种子抽样 ${n} 只，含存活偏差`;
+    } else {
+      txt = `按种子抽样 ${Math.max(n - 3, 5)} 只，再固定并入电网三只，合计 ${n} 只`;
+    }
   } else if (poolMode === 'grid') {
     txt = '固定标的：平高电气 600312 / 思源电气 002028 / 特变电工 600089';
   } else {
@@ -863,8 +887,14 @@ function updatePoolHint() {
 
 function init() {
   $('#end').value = new Date().toISOString().slice(0, 10);
+  updateModeHint();
   updatePoolHint();
 
+  seg('#segMode', (v) => {
+    modeSel = v;
+    updateModeHint();
+    updatePoolHint();
+  });
   seg('#segPool', (v) => {
     poolMode = v;
     $('#wrapN').style.display = v === 'sample' ? '' : 'none';
