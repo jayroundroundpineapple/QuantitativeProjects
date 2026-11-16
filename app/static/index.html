@@ -115,6 +115,7 @@
         <button data-tab="compare">策略对比</button>
         <button data-tab="yearly">分年度</button>
         <button data-tab="holdings">持仓与交易</button>
+        <button data-tab="rank">选股排名</button>
         <button data-tab="diag">诊断</button>
         <button data-tab="doc">怎么用</button>
       </div>
@@ -169,6 +170,25 @@
             <a class="link" id="dlHold" href="#">下载持仓 CSV</a>
             <a class="link" id="dlNav" href="#">下载净值 CSV</a>
             <a class="link" id="openReport" href="#" target="_blank">打开完整 HTML 报告</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-rank">
+        <div class="card">
+          <h2>选股排名 <em id="rankMeta"></em></h2>
+          <div class="mini" style="margin:-4px 0 10px;line-height:1.7">
+            总分 = 四个因子百分位的加权（已标准化，0 = 池内平均）；显示「—」表示该因子没接入数据。
+            所有分数都是「在池内的相对位置」，不是绝对值。
+          </div>
+          <div class="toolbar">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2);cursor:pointer">
+              <input type="checkbox" id="rankOnlyTop"> 只看入选
+            </label>
+            <a class="link" id="dlRank" href="#">下载排名 CSV</a>
+          </div>
+          <div style="overflow:visible">
+            <table id="tblRank"></table>
           </div>
         </div>
       </div>

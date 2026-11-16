@@ -141,9 +141,18 @@ class Job:
 def _prepare_pool(p: dict, job: Job) -> list[str]:
     pool, n, seed = p["pool"], int(p["n"]), int(p["seed"])
     if pool == "custom":
-        codes = [c.strip().zfill(6) for c in p["codes"].replace("，", ",").split(",") if c.strip()]
+        raw = p.get("codes") or ""
+        codes = [c.strip().zfill(6) for c in raw.replace("，", ",").replace(" ", ",").split(",") if c.strip()]
+        codes = list(dict.fromkeys(codes))                    # 去重但保持顺序
         if not codes:
-            raise ValueError("自定义代码为空，请填写 6 位股票代码，用逗号分隔")
+            raise ValueError("自定义代码为空：请填写 6 位股票代码，用逗号分隔，"
+                             "或把股票池切回「随机抽样」。")
+        if len(codes) < 3:
+            raise ValueError(
+                f"股票池只有 {len(codes)} 只（{'、'.join(codes)}），无法组成组合。\n"
+                f"想跑 100 只随机样本，请把左上角「股票池」切到「随机抽样」——"
+                f"「只股票」那个数字框只对随机抽样生效，自定义模式下会被忽略。")
+        job.log(f"自定义池 {len(codes)} 只（「只股票」数量框在本模式不生效）")
         return codes
     if pool == "grid":
         return list(GRID_MEMBERS)
@@ -234,6 +243,42 @@ def _pack(res) -> dict:
     }
 
 
+def _ranking(panel, cfg, top: int, held: set[str]) -> dict | None:
+    """最新交易日的选股排名：谁入选、谁落榜、各因子分别排多少。
+
+    打分日和持仓日不是同一天——持仓停在最后一次调仓，排名是「如果今天调仓会买谁」。
+    """
+    from src.factors import cross_section
+
+    close = panel["close"]
+    d = close.index[-1]
+    cs = cross_section(d, close, panel["fundamentals"], cfg.weights, cfg.min_price)
+    if cs.empty:
+        return None
+
+    elig = cs[cs["eligible"]].sort_values("score", ascending=False)
+    # 整列无变化 = 这个因子没数据（被按中性填充），显示成 null 而不是 50%
+    live = {k: (elig[c].nunique(dropna=True) > 1)
+            for k, c in [("value", "p_value"), ("quality", "p_quality"),
+                         ("growth", "p_growth"), ("momentum", "p_mom")]}
+    rows = []
+    for i, (code, r) in enumerate(elig.iterrows(), start=1):
+        rows.append({
+            "rank": i, "code": code,
+            "score": _f(r["score"], 3),
+            "value": _f(r.get("p_value"), 3) if live["value"] else None,
+            "quality": _f(r.get("p_quality"), 3) if live["quality"] else None,
+            "growth": _f(r.get("p_growth"), 3) if live["growth"] else None,
+            "momentum": _f(r.get("p_mom"), 3) if live["momentum"] else None,
+            "selected": i <= top,
+            "held": code in held,
+        })
+    return {"date": str(d.date()), "top": int(top),
+            "total": int(len(cs)), "eligible": int(len(elig)),
+            "live": [k for k in ("value", "quality", "growth", "momentum") if live[k]],
+            "rows": rows}
+
+
 def _compare(lines: dict) -> dict:
     """把多条曲线对齐到同一日期轴，供叠加对比。"""
     import pandas as pd
@@ -280,6 +325,17 @@ def _caveats(result: dict) -> list[dict]:
                     "text": f"样本中 {b['listed_after_start']} 只是回测区间内才上市的，"
                             f"区间外退市的股票一只都取不到；按现有口径基准年化约虚高 "
                             f"{b['bias_pp_per_year']} 个百分点（下限）。"})
+    rk = result.get("ranking") or {}
+    live = rk.get("live") or []
+    names = {"value": "价值(1/PE)", "quality": "质量(ROE)",
+             "growth": "成长(净利同比)", "momentum": "动量(60日)"}
+    if rk and len(live) < 4:
+        miss = [k for k in ("value", "quality", "growth", "momentum") if k not in live]
+        out.append({"level": "warn", "title": "有因子没接入，权重只落在剩下的上面",
+                    "text": f"实际在工作的只有 {'、'.join(names[k] for k in live)}；"
+                            f"{'、'.join(names[k] for k in miss)} 缺数据，已按「未接入」处理并把权重"
+                            f"让给其余因子。免费数据只给到 PE，补齐需要接财务指标（ROE、净利同比）"
+                            f"并按公告日对齐。"})
     out.append({"level": "info", "title": "回测 ≠ 未来",
                 "text": "引擎已按 T+1 开盘成交、涨跌停拦截、双边成本计算，但仍无法模拟冲击成本、"
                         "分红除权差异与真实成交队列。实盘收益通常低于回测。"})
@@ -389,13 +445,28 @@ def pipeline(p: dict, job: Job) -> dict:
             f"→ 基准年化约虚高 {bias['bias_pp_per_year']} 个百分点（{bias['note']}）")
 
     job.bump(95, "生成报告与导出文件")
+    main = raw.get("rotation") or raw.get("factor")
+    held: set[str] = set()
+    if main is not None and len(main.holdings):
+        last_d = main.holdings["date"].max()
+        held = set(main.holdings.loc[main.holdings["date"] == last_d, "code"])
+
+    rank = _ranking(panel, cfg, top, held)
+    if rank:
+        job.log(f"排名：{rank['date']} 池内 {rank['total']} 只、可交易 {rank['eligible']} 只，"
+                f"取前 {rank['top']} 只")
+
+    labels = {"sample": f"随机抽样 {len(codes)} 只",
+              "grid": "电网三只", "custom": f"自定义 {len(codes)} 只"}
     result = {
         "pool": {"count": len(codes), "codes": codes[:30],
+                 "kind": p["pool"], "label": labels.get(p["pool"], p["pool"]),
                  "first": str(close.index[0].date()), "last": str(close.index[-1].date()),
                  "days": int(len(close))},
         "params": p,
         "bias": bias,
         "strength": sig if mode in ("rotation", "both") else None,
+        "ranking": rank,
         "lines": lines,
         "compare": _compare(lines),
         "reports": reports,
@@ -405,8 +476,7 @@ def pipeline(p: dict, job: Job) -> dict:
     # CSV 导出：交易明细 / 期末持仓 / 净值（取主策略，不重跑回测）
     job.dir.mkdir(parents=True, exist_ok=True)
     try:
-        main = raw.get("rotation") or raw.get("factor")
-        _dump_csv(job, main)
+        _dump_csv(job, main, rank)
     except Exception as e:
         job.log(f"CSV 导出跳过：{type(e).__name__}: {e}")
 
@@ -415,7 +485,7 @@ def pipeline(p: dict, job: Job) -> dict:
     return result
 
 
-def _dump_csv(job: Job, res) -> None:
+def _dump_csv(job: Job, res, rank: dict | None = None) -> None:
     """把回测的原始表落盘，前端可直接下载。"""
     if res is None:
         return
@@ -423,7 +493,11 @@ def _dump_csv(job: Job, res) -> None:
     res.holdings.to_csv(job.dir / "holdings.csv", index=False, encoding="utf-8-sig")
     eq = res.equity.dropna()
     (eq / eq.iloc[0]).rename("nav").to_csv(job.dir / "nav.csv", encoding="utf-8-sig")
-    job.log("已导出 trades.csv / holdings.csv / nav.csv")
+    if rank and rank.get("rows"):
+        import pandas as pd
+        pd.DataFrame(rank["rows"]).to_csv(job.dir / "ranking.csv", index=False,
+                                          encoding="utf-8-sig")
+    job.log("已导出 trades.csv / holdings.csv / nav.csv / ranking.csv")
 
 
 def _worker(job: Job) -> None:
@@ -502,6 +576,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(fp, "text/html; charset=utf-8")
         if path.startswith("/api/export"):
             jid, kind = q.get("id", ""), q.get("kind", "trades")
+            if kind not in ("trades", "holdings", "nav", "ranking"):
+                return self._json({"error": "不支持的导出类型"}, 400)
             fp = JOBS / jid / f"{kind}.csv"
             if not fp.exists():
                 return self._json({"error": "文件不存在"}, 404)

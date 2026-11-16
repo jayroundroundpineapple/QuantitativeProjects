@@ -348,8 +348,9 @@ function render(data) {
   $('#results').style.display = 'block';
   $('#empty').style.display = 'none';
   $('#title').textContent = '回测结果';
+  const poolLabel = (data.pool && data.pool.label) || `${data.pool.count} 只`;
   $('#subtitle').textContent =
-    `${data.pool.first} → ${data.pool.last} · ${data.pool.count} 只 · ${data.pool.days} 个交易日 · ` +
+    `${data.pool.first} → ${data.pool.last} · ${poolLabel} · ${data.pool.days} 个交易日 · ` +
     `持仓 ${data.params.top} 只 · ${data.params.cost ? '含成本' : '不含成本'}`;
 
   renderChips(keys);
@@ -357,6 +358,7 @@ function render(data) {
   renderCompare(keys);
   renderYearly();
   renderHoldings();
+  renderRanking();
   renderDiag();
   renderDoc();
   showTab(state.tab);
@@ -470,7 +472,10 @@ function renderYearly() {
 function renderHoldings() {
   const L = state.data.lines[state.line];
   const hs = L.holdings || [];
-  $('#holdMeta').textContent = `${hs.length} 只 ｜ ${L.dates[L.dates.length - 1]}`;
+  const poolN = (state.data.pool || {}).count || 0;
+  const top = (state.data.params || {}).top || 0;
+  const warn = poolN && top && poolN < top ? ` ｜ 池内只有 ${poolN} 只，少于持仓 ${top} 只` : '';
+  $('#holdMeta').textContent = `${hs.length} 只 ｜ ${L.dates[L.dates.length - 1]}${warn}`;
   let html = '<thead><tr><th>代码</th><th>股数</th><th>市值</th><th>权重</th></tr></thead><tbody>';
   hs.forEach(h => {
     html += `<tr><td class="mono">${h.code}</td><td>${h.shares.toLocaleString()}</td>
@@ -479,6 +484,40 @@ function renderHoldings() {
   $('#tblHold').innerHTML = html + '</tbody>';
   const t = L.trade_stats;
   $('#tradeMeta').textContent = `共 ${t.count} 笔 ｜ 买 ${t.buy} / 卖 ${t.sell} ｜ 成交额 ${t.amount}`;
+}
+
+function renderRanking() {
+  const r = state.data.ranking;
+  const tb = $('#tblRank');
+  if (!tb) return;
+  if (!r) {
+    $('#rankMeta').textContent = '无数据';
+    tb.innerHTML = '<thead><tr><th>这一池股票没有可交易标的</th></tr></thead>';
+    return;
+  }
+  const onlyTop = $('#rankOnlyTop') && $('#rankOnlyTop').checked;
+  const rows = onlyTop ? r.rows.filter(x => x.selected) : r.rows;
+  const liveNames = { value: '价值', quality: '质量', growth: '成长', momentum: '动量' };
+  const live = (r.live || []).map(k => liveNames[k]).join(' + ') || '无';
+  $('#rankMeta').textContent =
+    `${r.date} 打分 ｜ 池内 ${r.total} 只 · 可交易 ${r.eligible} 只 ｜ ` +
+    `取前 ${r.top} ｜ 生效因子：${live}`;
+
+  const pct = (v) => v == null ? '—' : Math.round(v * 100) + '%';
+  let html = '<thead><tr><th>名次</th><th>代码</th><th>总分</th><th>价值</th>' +
+    '<th>质量</th><th>成长</th><th>动量</th><th>状态</th></tr></thead><tbody>';
+  rows.forEach(x => {
+    let tag = '<span style="color:var(--t3)">未入选</span>';
+    if (x.held && x.selected) tag = '<span style="color:var(--green)">持有</span>';
+    else if (x.held) tag = '<span style="color:var(--amber)">已跌出前 ' + r.top + '</span>';
+    else if (x.selected) tag = '<span style="color:var(--blue)">新进</span>';
+    const bg = x.selected ? ' style="background:rgba(79,143,240,.07)"' : '';
+    html += `<tr${bg}><td>${x.rank}</td><td class="mono">${x.code}</td>
+      <td style="color:var(--t1)">${x.score == null ? '—' : x.score.toFixed(2)}</td>
+      <td>${pct(x.value)}</td><td>${pct(x.quality)}</td>
+      <td>${pct(x.growth)}</td><td>${pct(x.momentum)}</td><td>${tag}</td></tr>`;
+  });
+  tb.innerHTML = html + '</tbody>';
 }
 
 function renderDiag() {
@@ -509,6 +548,8 @@ function bindDownloads() {
   $('#dlTrades').href = `/api/export?id=${id}&kind=trades`;
   $('#dlHold').href = `/api/export?id=${id}&kind=holdings`;
   $('#dlNav').href = `/api/export?id=${id}&kind=nav`;
+  const dr = $('#dlRank');
+  if (dr) dr.href = `/api/export?id=${id}&kind=ranking`;
   const rp = (state.data.reports || {})[ln] || (state.data.reports || {})[Object.keys(state.data.reports)[0]];
   const openBtn = $('#openReport');
   if (rp) { openBtn.style.display = ''; openBtn.href = `/report?id=${id}&line=${ln}`; }
@@ -523,6 +564,7 @@ function showTab(tab) {
   if (tab === 'compare') { renderCompare(Object.keys(state.data.lines)); }
   if (tab === 'yearly') { renderYearly(); }
   if (tab === 'holdings') { renderHoldings(); }
+  if (tab === 'rank') { renderRanking(); }
   if (tab === 'diag') { renderDiag(); }
 }
 
@@ -613,19 +655,39 @@ async function loadHistory(id) {
 }
 
 /* ------------------------------------------------------------ 初始化 */
+function updatePoolHint() {
+  const el = $('#poolHint');
+  let txt = '', warn = false;
+  if (poolMode === 'sample') {
+    const n = parseInt($('#n').value, 10) || 0;
+    txt = `从当前全部 A 股中按种子抽样 ${n} 只，含存活偏差`;
+  } else if (poolMode === 'grid') {
+    txt = '固定标的：平高电气 600312 / 思源电气 002028 / 特变电工 600089';
+  } else {
+    const codes = ($('#codes').value || '').split(/[,，\s]+/).filter(Boolean);
+    const top = parseInt($('#top').value, 10) || 20;
+    if (!codes.length) { txt = '请填写 6 位股票代码，逗号分隔'; warn = true; }
+    else if (codes.length < 3) { txt = `已填 ${codes.length} 只 —— 少于 3 只无法组成组合`; warn = true; }
+    else if (codes.length < top) { txt = `已填 ${codes.length} 只，少于持仓 ${top} 只，实际只会持有 ${codes.length} 只`; warn = true; }
+    else { txt = `已填 ${codes.length} 只 · 本模式下「只股票」数量框不生效`; }
+  }
+  el.textContent = txt;
+  el.style.color = warn ? 'var(--amber)' : '';
+}
+
 function init() {
   $('#end').value = new Date().toISOString().slice(0, 10);
+  updatePoolHint();
 
   seg('#segPool', (v) => {
     poolMode = v;
     $('#wrapN').style.display = v === 'sample' ? '' : 'none';
     $('#codes').style.display = v === 'custom' ? '' : 'none';
-    $('#poolHint').textContent = {
-      sample: '从当前全部 A 股中按种子抽样，含存活偏差',
-      grid: '固定标的：平高电气 600312 / 思源电气 002028 / 特变电工 600089',
-      custom: '只回测你指定的股票，涨跌停按板块规则自动识别',
-    }[v];
+    updatePoolHint();
   });
+  $('#codes').addEventListener('input', updatePoolHint);
+  $('#n').addEventListener('input', updatePoolHint);
+  $('#rankOnlyTop').addEventListener('change', renderRanking);
   costOn = switchEl('#swCost');
   cacheOn = switchEl('#swCache');
   $('#run').addEventListener('click', startRun);
@@ -644,6 +706,7 @@ function init() {
     }
   }).catch(() => {});
   fetch('/api/history').then(r => r.json()).then(rows => {
+    if (state.data) return;                       // 已经载入了某次结果，别覆盖标题
     if (rows.length && rows[0].status === 'done') {
       $('#subtitle').textContent = '上次运行：' + (rows[0].finished || '').replace('T', ' ') +
         '（点「历史记录」可载入）';

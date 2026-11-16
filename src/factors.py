@@ -51,12 +51,24 @@ def cross_section(date: pd.Timestamp,
         & df["mom"].notna() & df["ep"].notna()
     )
 
-    df["score"] = (
-        weights["value"] * _rank_pct(df["ep"])
-        + weights["quality"] * _rank_pct(df["roe"])
-        + weights["growth"] * _rank_pct(df["growth"])
-        + weights["momentum"] * _rank_pct(df["mom"])
-    )
+    # 各因子的百分位单独留一列：排名表要能解释「为什么是这个名字次」
+    df["p_value"] = _rank_pct(df["ep"])
+    df["p_quality"] = _rank_pct(df["roe"])
+    df["p_growth"] = _rank_pct(df["growth"])
+    df["p_mom"] = _rank_pct(df["mom"])
+
+    # 因子覆盖不足 30% 时把它当「未接入」：权重让给其余因子，而不是按 0.5 硬填。
+    # 硬填虽然不改排序（常数会被标准化消掉），但会让人误以为这个因子算过了。
+    cols = {"value": "ep", "quality": "roe", "growth": "growth", "momentum": "mom"}
+    n = max(len(df), 1)
+    avail = {k: float(df[c].notna().sum() / n >= 0.3) for k, c in cols.items()}
+    tot_w = sum(weights[k] for k in weights if avail[k]) or 1.0
+
+    df["score"] = sum(
+        weights[k] * df["p_" + ("mom" if k == "momentum" else k)] * avail[k]
+        for k in weights
+    ) / tot_w
+    df.attrs["factor_available"] = avail
     z = df["score"] - 0.5
     df["score"] = z / (z[df["eligible"]].std() or 1.0)
     return df
