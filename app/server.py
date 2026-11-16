@@ -134,7 +134,7 @@ class Job:
                     "excess": st.get("excess_med"), "ic": st.get("ic_med"),
                     "n": self.result.get("pool", {}).get("n")}
         lines = self.result.get("lines", {})
-        main = lines.get("rotation") or lines.get("factor") or {}
+        main = lines.get("factor") or lines.get("rotation") or {}
         m = main.get("metrics", {})
         return {
             "cagr": m.get("cagr"), "max_dd": m.get("max_dd"),
@@ -937,6 +937,8 @@ def _free_port(preferred: int) -> int:
     for port in [preferred, preferred + 1, preferred + 2, preferred + 3, 0]:
         with socket.socket() as s:
             try:
+                # 刚退出的进程会留 TIME_WAIT，不设这个会让探测误判「端口被占用」
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind(("127.0.0.1", port))
                 return s.getsockname()[1]
             except OSError:
