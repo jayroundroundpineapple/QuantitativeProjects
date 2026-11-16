@@ -18,8 +18,14 @@ def cross_section(date: pd.Timestamp,
                   fundamentals: pd.DataFrame,
                   weights: dict | None = None,
                   min_price: float = 3.0,
-                  min_history: int = 120) -> pd.DataFrame:
+                  min_history: int = 120,
+                  roe: pd.DataFrame | None = None,
+                  growth: pd.DataFrame | None = None) -> pd.DataFrame:
     """在 date 这一天，对全市场算四个因子的截面得分。
+
+    fundamentals : 每日 PE 长表（date / code / pe_ttm）
+    roe / growth : 可选的「日期 × 代码」财报面板（已按公告可用日对齐、无未来函数）
+                   不传则质量/成长因子视为未接入
 
     返回 DataFrame(index=code)，列：ep, roe, growth, mom, score, eligible
     """
@@ -41,8 +47,14 @@ def cross_section(date: pd.Timestamp,
     df["price"] = px
     df["ep"] = np.where(fu["pe_ttm"].reindex(df.index) > 0,
                         1.0 / fu["pe_ttm"].reindex(df.index), np.nan)
-    df["roe"] = fu["roe_ttm"].reindex(df.index)
-    df["growth"] = fu["net_profit_yoy"].reindex(df.index)
+
+    def _panel(src):
+        if src is not None and date in src.index:
+            return src.loc[date].reindex(df.index)
+        return pd.Series(np.nan, index=df.index, dtype=float)
+
+    df["roe"] = _panel(roe)
+    df["growth"] = _panel(growth)
     df["mom"] = (px / px_60 - 1).reindex(df.index)
 
     # 可交易性：有报价、未停牌、价格不过低、有 60 日历史

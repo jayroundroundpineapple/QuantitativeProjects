@@ -165,14 +165,38 @@ def fetch_pe(codes: list[str], use_cache: bool = True, progress=None) -> pd.Data
     return out
 
 
-def to_panel(prices: dict, pe: pd.DataFrame) -> dict:
-    """拼成 engine 需要的 panel。质量/成长因子留空 -> 打分时自动中性。
-    要接真实 ROE / 净利增速，用 ak.stock_financial_analysis_indicator，
-    并按「报告期 + 90 天」对齐公告日，否则会引入未来函数。"""
+def fetch_fundamentals(codes: list[str], start: str, end: str,
+                       use_cache: bool = True, progress=None) -> pd.DataFrame:
+    """转调 fundamentals 模块（放在这里是为了让调用方只依赖 realdata 一个入口）。"""
+    from . import fundamentals as fd
+    return fd.fetch_fundamentals(codes, start, end, use_cache=use_cache, progress=progress)
+
+
+def to_panel(prices: dict, pe: pd.DataFrame,
+             fin: pd.DataFrame | None = None) -> dict:
+    """拼成 engine 需要的 panel。
+
+    pe  : 每日 PE(TTM) 长表（date / code / pe_ttm）→ 估值因子
+    fin : 财报长表（date=可用日 / code / roe / growth）→ 质量、成长因子
+          没传就留空，打分时这两个因子会被判为「未接入」并把权重让给其余因子。
+    """
+    from . import fundamentals as fd
+
     pe = pe.copy()
     pe["roe_ttm"] = np.nan
     pe["net_profit_yoy"] = np.nan
     panel = dict(prices)
+
+    codes = list(prices["close"].columns)
+    idx = prices["close"].index
+    if fin is not None and len(fin):
+        panel["roe_panel"] = fd.align(fin, idx, codes, "roe")
+        panel["growth_panel"] = fd.align(fin, idx, codes, "growth")
+        panel["fin_meta"] = fd.latest_meta(fin)
+    else:
+        panel["roe_panel"] = panel["growth_panel"] = None
+        panel["fin_meta"] = {"period": None, "codes": 0, "industry": {}}
+
     panel["fundamentals"] = pe
     return panel
 

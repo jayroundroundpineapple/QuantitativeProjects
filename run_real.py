@@ -75,8 +75,18 @@ def main() -> None:
 
     print("③ 拉估值（百度源，PE-TTM 日频）…")
     pe = rd.fetch_pe(codes)
-    panel = rd.to_panel(prices, pe)
+    print("④ 拉财报（东财业绩报表，ROE / 净利同比，首次约 1–2 分钟）…")
+    try:
+        fin = rd.fetch_fundamentals(codes, args.start, args.end)
+    except Exception as e:
+        fin = None
+        print(f"   财报获取失败（{type(e).__name__}），质量/成长因子不参与打分")
+    panel = rd.to_panel(prices, pe, fin)
     print(f"   估值记录 {len(pe):,} 条，覆盖 {pe['code'].nunique()} 只")
+    if fin is not None and len(fin):
+        meta = panel["fin_meta"]
+        print(f"   财报 {fin['period'].nunique()} 期，最新 {meta['period']}"
+              f"（{meta['avail']} 起可用），覆盖 {meta['codes']} 只")
 
     cfg = Config(top_n=args.top, capital=1_000_000.0)
     if not OUT.exists():
@@ -84,7 +94,7 @@ def main() -> None:
     summary = {}
 
     if args.mode in ("factor", "both"):
-        print("④ 多因子回测…")
+        print("⑤ 多因子回测…")
         res = run(panel, cfg)
         m = res.metrics
         summary["factor"] = m
@@ -95,7 +105,7 @@ def main() -> None:
               "真实 A 股数据（100 只抽样）｜⚠️ 含存活偏差，且 100 只样本的 IC 噪声极大")
 
     if args.mode in ("rotation", "both"):
-        print("⑤ 电网设备行业轮动…")
+        print("⑥ 电网设备行业轮动…")
         r = run_rotation(panel, GRID_MEMBERS, cfg)
         for k, res in (("rotation", r["rotation"]), ("sector_only", r["sector_only"])):
             summary[k] = res.metrics
@@ -115,7 +125,7 @@ def main() -> None:
         }
         print(f"   当前强度分 {st['score'].iloc[-1]:+.2f} → {summary['strength_last']['signal']}")
 
-    print("⑥ 存活偏差测算…")
+    print("⑦ 存活偏差测算…")
     b = bias_report(codes, close, args.start, args.end)
     dl = b.pop("delist_df")
     best = dl.sort_values("delist_date").tail(8) if len(dl) else pd.DataFrame()

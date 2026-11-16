@@ -73,6 +73,7 @@
     </div>
 
     <button class="primary" id="run">开始回测</button>
+    <button class="ghost" id="runStress" style="width:100%">抽样压力测试（换 12 批股票重跑）</button>
     <div class="foot">
       数据保存在本机 <code style="font-size:10.5px">quant_lab/out/</code><br>
       回测仅供研究，不构成投资建议
@@ -116,6 +117,7 @@
         <button data-tab="yearly">分年度</button>
         <button data-tab="holdings">持仓与交易</button>
         <button data-tab="rank">选股排名</button>
+        <button data-tab="stress">压力测试</button>
         <button data-tab="diag">诊断</button>
         <button data-tab="doc">怎么用</button>
       </div>
@@ -193,7 +195,40 @@
         </div>
       </div>
 
+      <div class="pane" id="pane-stress">
+        <div class="card" style="margin-bottom:14px">
+          <h2>抽样压力测试 <em id="stressMeta">还没跑</em></h2>
+          <div class="mini" style="margin:-4px 0 12px;line-height:1.75">
+            同一套规则、同一区间，<b>只换一批股票</b>，看年化收益散得多开。
+            散得窄 = 这套规则对「买到谁」不敏感；散得宽 = 你看到的那个年化里，大部分是抽样运气。
+          </div>
+          <div id="stressEmpty" class="mini" style="padding:18px 0;text-align:center;color:var(--t3)">
+            点左侧「抽样压力测试」开始。首次需要抓 400 只股票的行情与财报，约 3–5 分钟，之后走缓存。
+          </div>
+          <div id="stressBody" style="display:none">
+            <div class="kpis" id="stressKpis"></div>
+            <div class="chart" id="chartStress"></div>
+            <div class="legend">
+              <span><i style="background:#4f8ff0"></i>每次抽样的年化</span>
+              <span><i style="background:#d99a2b"></i>中位数</span>
+              <span style="color:var(--t3)">横轴是第几次抽样，不是时间</span>
+            </div>
+          </div>
+        </div>
+        <div class="card" id="stressTableCard" style="display:none">
+          <h2>逐次明细 <em id="stressTblMeta"></em></h2>
+          <div class="toolbar" style="margin-bottom:8px">
+            <a class="link" id="dlStress" href="#">下载 CSV</a>
+          </div>
+          <table id="tblStress"></table>
+        </div>
+      </div>
+
       <div class="pane" id="pane-diag">
+        <div class="card" style="margin-bottom:14px">
+          <h2>数据从哪来、新到哪一天 <em id="srcMeta"></em></h2>
+          <table id="tblSrc"></table>
+        </div>
         <div class="card" style="margin-bottom:14px" id="sigCard" style="display:none">
           <h2>轮动信号 <em id="sigNow"></em></h2>
           <div class="chart" id="chartSig"></div>

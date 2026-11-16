@@ -12,6 +12,7 @@ const NAMES = { factor: '多因子选股', rotation: '电网轮动', sector_only
 const state = {
   jobId: null, timer: null, data: null, params: null,
   line: 'factor', tab: 'overview', t0: 0,
+  stress: null, stressId: null,
 };
 
 /* ------------------------------------------------------------ 图表内核 */
@@ -283,6 +284,7 @@ async function startRun() {
   const p = readParams();
   if (p.start >= p.end) { alert('开始日期必须早于结束日期'); return; }
   $('#run').disabled = true;
+  $('#runStress').disabled = true;
   $('#empty').style.display = 'none';
   $('#results').style.display = 'none';
   $('#progress').style.display = 'block';
@@ -299,6 +301,36 @@ async function startRun() {
     setStatus('err', '启动失败');
     $('#step').textContent = e.message;
     $('#run').disabled = false;
+    $('#runStress').disabled = false;
+  }
+}
+
+async function startStress() {
+  const p = readParams();
+  if (p.start >= p.end) { alert('开始日期必须早于结束日期'); return; }
+  const poolSize = Math.min(600, Math.max(300, Math.round(p.n * 4)));
+  if (!confirm(`压力测试会用 ${poolSize} 只股票作母体，反复抽 ${p.n} 只、每次持仓 ${p.top} 只、共 12 次。\n` +
+               `首次要抓 ${poolSize} 只的行情与财报，约 3–5 分钟（之后走缓存）。开始吗？`)) return;
+  $('#run').disabled = true;
+  $('#runStress').disabled = true;
+  $('#empty').style.display = 'none';
+  $('#results').style.display = 'block';
+  $('#progress').style.display = 'block';
+  $('#log').textContent = '';
+  $('#pbar').style.width = '0%';
+  setStatus('run', '压力测试中');
+  state.t0 = Date.now();
+  try {
+    const { id } = await api('/api/stress', { ...p, draws: 12, pool_size: poolSize });
+    state.jobId = id;
+    state.params = p;
+    showTab('stress');
+    poll();
+  } catch (e) {
+    setStatus('err', '启动失败');
+    $('#step').textContent = e.message;
+    $('#run').disabled = false;
+    $('#runStress').disabled = false;
   }
 }
 
@@ -314,15 +346,26 @@ async function poll() {
     if (d.status === 'done') {
       setStatus('done', '完成 · ' + d.elapsed + 's');
       $('#run').disabled = false;
+      $('#runStress').disabled = false;
+      setTimeout(() => { $('#progress').style.display = 'none'; }, 1200);
+      if (d.result && d.result.kind === 'stress') {
+        state.stress = d.result;
+        state.stressId = d.id;
+        $('#results').style.display = 'block';
+        $('#title').textContent = '抽样压力测试';
+        renderStress();
+        showTab('stress');
+        return;
+      }
       state.data = d.result;
       state.jobId = d.id;
       render(d.result);
-      setTimeout(() => { $('#progress').style.display = 'none'; }, 1200);
       return;
     }
     if (d.status === 'error') {
       setStatus('err', '失败');
       $('#run').disabled = false;
+      $('#runStress').disabled = false;
       $('#step').textContent = '失败：' + d.error;
       return;
     }
@@ -340,6 +383,15 @@ function renderLog(logs) {
 
 /* ------------------------------------------------------------ 渲染 */
 function render(data) {
+  if (!data) return;
+  if (data.kind === 'stress') {          // 压力测试结果走另一套渲染
+    state.stress = data;
+    $('#results').style.display = 'block';
+    $('#title').textContent = '抽样压力测试';
+    renderStress();
+    showTab('stress');
+    return;
+  }
   const lines = data.lines || {};
   const keys = Object.keys(lines);
   if (!keys.length) { setStatus('err', '无结果'); return; }
@@ -504,8 +556,8 @@ function renderRanking() {
     `取前 ${r.top} ｜ 生效因子：${live}`;
 
   const pct = (v) => v == null ? '—' : Math.round(v * 100) + '%';
-  let html = '<thead><tr><th>名次</th><th>代码</th><th>总分</th><th>价值</th>' +
-    '<th>质量</th><th>成长</th><th>动量</th><th>状态</th></tr></thead><tbody>';
+  let html = '<thead><tr><th>名次</th><th>代码</th><th>名称</th><th>行业</th><th>总分</th>' +
+    '<th>价值</th><th>质量</th><th>成长</th><th>动量</th><th>状态</th></tr></thead><tbody>';
   rows.forEach(x => {
     let tag = '<span style="color:var(--t3)">未入选</span>';
     if (x.held && x.selected) tag = '<span style="color:var(--green)">持有</span>';
@@ -513,6 +565,8 @@ function renderRanking() {
     else if (x.selected) tag = '<span style="color:var(--blue)">新进</span>';
     const bg = x.selected ? ' style="background:rgba(79,143,240,.07)"' : '';
     html += `<tr${bg}><td>${x.rank}</td><td class="mono">${x.code}</td>
+      <td style="color:var(--t1)">${x.name || '—'}</td>
+      <td style="color:var(--t3);font-size:11.5px">${x.industry || '—'}</td>
       <td style="color:var(--t1)">${x.score == null ? '—' : x.score.toFixed(2)}</td>
       <td>${pct(x.value)}</td><td>${pct(x.quality)}</td>
       <td>${pct(x.growth)}</td><td>${pct(x.momentum)}</td><td>${tag}</td></tr>`;
@@ -520,7 +574,91 @@ function renderRanking() {
   tb.innerHTML = html + '</tbody>';
 }
 
+function renderStress() {
+  const s = state.stress;
+  if (!s) {
+    $('#stressEmpty').style.display = 'block';
+    $('#stressBody').style.display = 'none';
+    $('#stressTableCard').style.display = 'none';
+    return;
+  }
+  const st = s.stats, rows = s.rows || [];
+  $('#stressEmpty').style.display = 'none';
+  $('#stressBody').style.display = 'block';
+  $('#stressTableCard').style.display = 'block';
+  $('#stressMeta').textContent =
+    `${s.pool.first} → ${s.pool.last} ｜ 母体 ${s.pool.size} 只 · 每次抽 ${s.pool.n} 只 · ` +
+    `持仓 ${s.pool.top} 只 · 共 ${st.draws} 次`;
+
+  const cards = [
+    ['年化中位数', fmtPct(st.cagr_med), st.cagr_med],
+    ['年化 10 分位', fmtPct(st.cagr_p10), st.cagr_p10],
+    ['年化 90 分位', fmtPct(st.cagr_p90), st.cagr_p90],
+    ['最差一次', fmtPct(st.cagr_min), st.cagr_min],
+    ['最好一次', fmtPct(st.cagr_max), st.cagr_max],
+    ['超额中位', fmtPct(st.excess_med), st.excess_med],
+    ['跑赢基准占比', fmtPct(st.excess_pos_pct, 0), null],
+    ['最差回撤', fmtPct(st.dd_worst), null],
+    ['夏普中位', fmtNum(st.sharpe_med), st.sharpe_med],
+    ['IC 中位', fmtNum(st.ic_med, 3), st.ic_med],
+    ['年化标准差', fmtPct(st.cagr_std), null],
+    ['抽样次数', st.draws + ' 次', null],
+  ];
+  $('#stressKpis').innerHTML = cards.map(([k, v, c]) => {
+    let cls = '';
+    if (c != null && !isNaN(c)) cls = c >= 0 ? 'pos' : 'neg';
+    return `<div class="kpi"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
+  }).join('');
+
+  lineChart($('#chartStress'), {
+    labels: rows.map(r => '#' + r.draw), height: 280, zero: true,
+    yFmt: (v) => fmtPct(v, 0),
+    series: [
+      { name: '年化', data: rows.map(r => r.cagr), color: '#4f8ff0', width: 1.8,
+        fmt: (v) => fmtPct(v) },
+      { name: '中位数', data: rows.map(() => st.cagr_med), color: '#d99a2b', width: 1.2,
+        fmt: (v) => fmtPct(v) },
+    ],
+  });
+
+  $('#stressTblMeta').textContent = '同一套参数，只换了股票';
+  let h = '<thead><tr><th>抽样</th><th>年化</th><th>超额</th><th>最大回撤</th>' +
+    '<th>夏普</th><th>年换手</th><th>IC</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    const c = (v) => v == null ? '' : (v >= 0 ? 'pos' : 'neg');
+    h += `<tr><td>第 ${r.draw} 次</td>
+      <td class="${c(r.cagr)}">${fmtPct(r.cagr)}</td>
+      <td class="${c(r.excess_cagr)}">${fmtPct(r.excess_cagr)}</td>
+      <td>${fmtPct(r.max_dd)}</td><td>${fmtNum(r.sharpe)}</td>
+      <td>${fmtNum(r.turnover_annual)}x</td><td>${fmtNum(r.ic_mean, 3)}</td></tr>`;
+  });
+  $('#tblStress').innerHTML = h + '</tbody>';
+  $('#dlStress').href = `/api/export?id=${state.stressId}&kind=stress`;
+}
+
+function renderSources() {
+  const s = (state.data && state.data.sources) || [];
+  const tb = $('#tblSrc');
+  if (!tb) return;
+  if (!s.length) {
+    tb.innerHTML = '<thead><tr><th>暂无数据来源信息</th></tr></thead>';
+    $('#srcMeta').textContent = '';
+    return;
+  }
+  $('#srcMeta').textContent = '全是免费公开接口，本地抓取、本地计算';
+  let html = '<thead><tr><th>类型</th><th>接口</th><th>频率</th><th>最新到</th><th>说明</th></tr></thead><tbody>';
+  s.forEach(x => {
+    html += `<tr><td style="color:var(--t1)">${x.k}</td>
+      <td class="mono" style="font-size:11.5px">${x.src}</td>
+      <td style="color:var(--t3);font-size:11.5px">${x.freq}</td>
+      <td>${x.asof || '—'}</td>
+      <td style="text-align:left;color:var(--t2);font-size:11.5px;line-height:1.6">${x.note}</td></tr>`;
+  });
+  tb.innerHTML = html + '</tbody>';
+}
+
 function renderDiag() {
+  renderSources();
   const s = state.data.strength;
   const card = $('#sigCard');
   if (!s) { card.style.display = 'none'; }
@@ -565,6 +703,7 @@ function showTab(tab) {
   if (tab === 'yearly') { renderYearly(); }
   if (tab === 'holdings') { renderHoldings(); }
   if (tab === 'rank') { renderRanking(); }
+  if (tab === 'stress') { renderStress(); }
   if (tab === 'diag') { renderDiag(); }
 }
 
@@ -572,7 +711,30 @@ function showTab(tab) {
 const DOC = `
 <h3>这个工具做了什么</h3>
 <p>把「多因子选股 + 行业轮动」两套策略跑在真实 A 股数据上，输出可复现的净值、回撤、分年度收益和统计诊断。
-所有计算在本机完成，不联网上传任何东西。数据抓取用 akshare（腾讯行情 + 百度估值），落盘缓存，重跑不重复请求。</p>
+所有计算在本机完成，不联网上传任何东西。数据抓取用 akshare，落盘缓存，重跑不重复请求。</p>
+
+<h3>数据从哪来（都在「诊断」页第一张表里）</h3>
+<ul>
+<li><b>行情</b>：腾讯财经日线，前复权。最新到最近一个交易日收盘——15:00 之后再跑就含当天。</li>
+<li><b>估值</b>：百度股市通每日 PE(TTM)，和行情同日对齐。</li>
+<li><b>财报</b>：东方财富「业绩报表」，一次一个报告期，含 ROE、净利同比、所属行业。</li>
+<li><b>退市名单</b>：上交所/深交所暂停终止上市口径，只用来估存活偏差，不进样本。</li>
+</ul>
+<p><b>关于「是不是最新」</b>：默认勾选「复用本地缓存」，所以看到的可能是上次抓的数据。
+要点「用最新数据」就把这个开关关掉，会重新请求。财报还有个天然延迟——
+本工具按<b>法定披露截止日</b>（Q1 4/30、H1 8/31、Q3 10/31、年报次年 4/30）才让财报进入打分，
+宁可晚用不可早用，所以不会偷看未来，但也会漏掉提前披露的信息量。</p>
+
+<h3>四个因子分别在说什么</h3>
+<ul>
+<li><b>价值 1/PE</b>：同样的盈利，谁卖得便宜。注意 PE 为负（亏损）的直接剔除，不是排最后。</li>
+<li><b>质量 ROE</b>：同样的净资产，谁赚得多。用的是年内累计 ROE × 4/季度序号 的年化近似。</li>
+<li><b>成长 净利同比</b>：利润在变多还是变少。极端值靠排名百分位压住，不会因为一个 3000% 就乱套。</li>
+<li><b>动量 60 日涨幅</b>：最近三个月谁在走强。它和「价值」经常打架，这正是组合的意义。</li>
+</ul>
+<p>四个因子各自转成 0~100% 的排名百分位，再加权（0.30 / 0.25 / 0.25 / 0.20）。用排名而不是原始值，
+是因为 A 股的财务数据极端值太多，均值方差会被一两个异常值带跑。某个因子没数据时，
+它的权重会让给其余因子，而不是按中性 50% 硬填——后者会让你以为它算过了。</p>
 
 <h3>指标怎么看</h3>
 <ul>
@@ -580,7 +742,16 @@ const DOC = `
 <li><b>年化超额</b>：减去等权基准的部分。这是唯一和你「选股能力」有关的数字，年化收益本身会骗人。</li>
 <li><b>夏普 / 卡玛</b>：单位风险的收益。A 股长期夏普超过 0.8 已经很好，超过 1.5 的都要怀疑数据。</li>
 <li><b>IC / ICIR</b>：打分和未来收益的秩相关。<b>关键是和 1/√N 比</b>——100 只样本的标准误是 0.10，IC 0.02 等于噪声。</li>
-<li><b>年换手</b>：超过 10 倍时，成本会吃掉大部分超额。点开「计入交易成本」对比一次就明白。</li>
+<li><b>年换手</b>：超过 10 倍时，成本会吃掉大部分超额。关掉「计入交易成本」对比一次就明白。</li>
+</ul>
+
+<h3>压力测试在回答什么问题</h3>
+<p>单次回测最容易被误读的地方是：<b>把「这一百只股票涨得好」当成「这套方法有效」</b>。
+压力测试不调参数、不改因子，只从一个大样本池里反复抽不同的股票，看同一套规则的年化散得多开。</p>
+<ul>
+<li>散得窄 → 规则对「买到谁」不敏感，那个年化更可信。</li>
+<li>散得宽 → 你看到的收益里大部分是抽样运气。中间 80% 的区间才是它真实的能力范围。</li>
+<li>「跑赢基准占比」接近 50% → 这个策略其实没在选股，只是在承担波动。</li>
 </ul>
 
 <h3>每周怎么用（约 5 分钟）</h3>
@@ -599,8 +770,10 @@ const DOC = `
 
 <h3>它不能做什么</h3>
 <ul>
-<li>不含退市股：样本只有「今天还活着」的股票，基准被系统性高估（诊断页有估算值）。</li>
-<li>样本小：换种子重跑，收益就会明显变化——这说明差异来自抽样运气。</li>
+<li>不含退市股：免费源只给「今天还活着」的股票，基准被系统性高估（诊断页有估算值）。
+    要真正解决得用 tushare 的退市全样本，见 README「接 tushare」。</li>
+<li>财报用披露截止日近似，不是真实公告日；ROE 是年化近似值。</li>
+<li>样本小：换一批股票重跑收益就会明显变化——压力测试页就是在量这件事。</li>
 <li>不预测：它只告诉你历史上什么条件成立过，不告诉你明天。</li>
 </ul>
 <p style="color:var(--t3);margin-top:16px">回测仅供研究，不构成投资建议。市场有风险，投资需谨慎。</p>`;
@@ -634,8 +807,10 @@ async function openHistory() {
     div.style.cssText = 'display:flex;justify-content:space-between;gap:12px;align-items:center;' +
       'padding:10px 0;border-top:1px solid var(--line)';
     div.innerHTML = `<div>
-        <div style="font-size:12.5px">${(r.finished || '').replace('T', ' ')} · ${p.pool === 'grid' ? '电网三只' : (p.n || '') + ' 只'} ·
-          ${p.mode === 'both' ? '多因子+轮动' : (p.mode === 'factor' ? '多因子' : '轮动')}</div>
+        <div style="font-size:12.5px">${(r.finished || '').replace('T', ' ')} ·
+          ${r.kind === 'stress' ? '抽样压力测试'
+            : (p.pool === 'grid' ? '电网三只' : (p.n || '') + ' 只') + ' · ' +
+              (p.mode === 'both' ? '多因子+轮动' : (p.mode === 'factor' ? '多因子' : '轮动'))}</div>
         <div style="color:var(--t3);font-size:11.5px">年化 ${fmtPct(h.cagr)} · 回撤 ${fmtPct(h.max_dd)} ·
           超额 ${fmtPct(h.excess)} · ${r.status}</div></div>
       <button class="ghost" data-id="${r.id}">载入</button>`;
@@ -646,6 +821,16 @@ async function openHistory() {
 async function loadHistory(id) {
   const st = await api('/api/replay?id=' + id);
   if (!st.result) { alert('这条记录没有可用结果'); return; }
+  if (st.result.kind === 'stress') {
+    state.stress = st.result;
+    state.stressId = id;
+    $('#empty').style.display = 'none';
+    $('#results').style.display = 'block';
+    renderStress();
+    showTab('stress');
+    setStatus('done', '已载入历史');
+    return;
+  }
   state.jobId = id;
   state.data = st.result;
   render(st.result);
@@ -691,6 +876,7 @@ function init() {
   costOn = switchEl('#swCost');
   cacheOn = switchEl('#swCache');
   $('#run').addEventListener('click', startRun);
+  $('#runStress').addEventListener('click', startStress);
   $('#btnHistory').addEventListener('click', openHistory);
   $('#btnReveal').addEventListener('click', () => {
     api('/api/reveal', { id: state.jobId || '' }).catch(() => {});

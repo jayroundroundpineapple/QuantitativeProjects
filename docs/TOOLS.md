@@ -94,15 +94,17 @@
 
 ## 7. 给这个仓库的升级路线
 
-| 优先级 | 做什么 | 用哪个工具 |
-|---|---|---|
-| P0 | 数据换含退市股的全样本 | tushare pro / JQData |
-| P0 | 因子分析标准化 | alphalens-reloaded |
-| P1 | 绩效报告换掉自己写的 | quantstats |
-| P1 | 加行业/市值中性 | 申万行业分类 + 市值分组 |
-| P2 | 组合优化 | riskfolio-lib |
-| P2 | 提速参数扫描 | vectorbt |
-| P3 | 实盘 | 券商 QMT |
+| 优先级 | 做什么 | 用哪个工具 | 状态 |
+|---|---|---|---|
+| P0 | 数据换含退市股的全样本 | tushare pro / JQData | 适配器已写（`src/tushare_source.py`），待配 token 实跑 |
+| P0 | 因子分析标准化 | alphalens-reloaded | 未做 |
+| P1 | 质量/成长因子接入 | 东财业绩报表（akshare） | ✅ 已完成，按披露截止日对齐 |
+| P1 | 抽样不确定性量化 | 自写 bootstrap（无需依赖） | ✅ 已完成，界面「压力测试」页 |
+| P1 | 绩效报告换掉自己写的 | quantstats | 未做 |
+| P1 | 加行业/市值中性 | 申万行业分类 + 市值分组 | 未做 |
+| P2 | 组合优化 | riskfolio-lib | 未做 |
+| P2 | 提速参数扫描 | vectorbt | 未做 |
+| P3 | 实盘 | 券商 QMT | 未做 |
 
 ---
 

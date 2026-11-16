@@ -53,6 +53,7 @@ def run(data: dict, cfg: Config | None = None, selector=None) -> Result:
     ld = data["limit_down"].reindex_like(close)
     susp = data["suspended"].reindex_like(close).fillna(True)
     fu = data["fundamentals"]
+    roe_p, gro_p = data.get("roe_panel"), data.get("growth_panel")
 
     if cfg.start:
         close = close.loc[cfg.start:]
@@ -81,7 +82,8 @@ def run(data: dict, cfg: Config | None = None, selector=None) -> Result:
         if nxt_i < ei:
             break
 
-        cs = cross_section(rb, close, fu, cfg.weights, cfg.min_price)
+        cs = cross_section(rb, close, fu, cfg.weights, cfg.min_price,
+                           roe=roe_p, growth=gro_p)
         if cs.empty or not cs["eligible"].any():
             continue
         elig = cs[cs["eligible"]].sort_values("score", ascending=False)

@@ -74,9 +74,10 @@ def _s8(d: str) -> str:
 
 # ---------------------------------------------------------------- job 容器
 class Job:
-    def __init__(self, params: dict):
+    def __init__(self, params: dict, kind: str = "backtest"):
         self.id = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
         self.params = params
+        self.kind = kind                 # backtest | stress
         self.status = "running"          # running | done | error | cancelled
         self.step = "排队中"
         self.progress = 0
@@ -106,7 +107,7 @@ class Job:
 
     def snapshot(self) -> dict:
         return {
-            "id": self.id, "status": self.status, "step": self.step,
+            "id": self.id, "status": self.status, "step": self.step, "kind": self.kind,
             "progress": self.progress, "logs": self.logs[-200:],
             "error": self.error, "params": self.params,
             "elapsed": round(self.elapsed or (time.time() - self.t0), 1),
@@ -127,6 +128,11 @@ class Job:
     def _headline(self) -> dict:
         if not self.result:
             return {}
+        if self.result.get("kind") == "stress":
+            st = self.result.get("stats", {})
+            return {"kind": "stress", "cagr": st.get("cagr_med"), "max_dd": st.get("dd_worst"),
+                    "excess": st.get("excess_med"), "ic": st.get("ic_med"),
+                    "n": self.result.get("pool", {}).get("n")}
         lines = self.result.get("lines", {})
         main = lines.get("rotation") or lines.get("factor") or {}
         m = main.get("metrics", {})
@@ -252,7 +258,8 @@ def _ranking(panel, cfg, top: int, held: set[str]) -> dict | None:
 
     close = panel["close"]
     d = close.index[-1]
-    cs = cross_section(d, close, panel["fundamentals"], cfg.weights, cfg.min_price)
+    cs = cross_section(d, close, panel["fundamentals"], cfg.weights, cfg.min_price,
+                       roe=panel.get("roe_panel"), growth=panel.get("growth_panel"))
     if cs.empty:
         return None
 
@@ -261,10 +268,13 @@ def _ranking(panel, cfg, top: int, held: set[str]) -> dict | None:
     live = {k: (elig[c].nunique(dropna=True) > 1)
             for k, c in [("value", "p_value"), ("quality", "p_quality"),
                          ("growth", "p_growth"), ("momentum", "p_mom")]}
+    names = (panel.get("fin_meta") or {}).get("name") or {}
+    industry = (panel.get("fin_meta") or {}).get("industry") or {}
     rows = []
     for i, (code, r) in enumerate(elig.iterrows(), start=1):
         rows.append({
             "rank": i, "code": code,
+            "name": names.get(code, "—"), "industry": industry.get(code, "—"),
             "score": _f(r["score"], 3),
             "value": _f(r.get("p_value"), 3) if live["value"] else None,
             "quality": _f(r.get("p_quality"), 3) if live["quality"] else None,
@@ -334,8 +344,12 @@ def _caveats(result: dict) -> list[dict]:
         out.append({"level": "warn", "title": "有因子没接入，权重只落在剩下的上面",
                     "text": f"实际在工作的只有 {'、'.join(names[k] for k in live)}；"
                             f"{'、'.join(names[k] for k in miss)} 缺数据，已按「未接入」处理并把权重"
-                            f"让给其余因子。免费数据只给到 PE，补齐需要接财务指标（ROE、净利同比）"
-                            f"并按公告日对齐。"})
+                            f"让给其余因子。"})
+    elif rk and len(live) == 4:
+        out.append({"level": "info", "title": "财报因子按披露截止日生效，不是真实公告日",
+                    "text": "ROE 与净利同比在法定截止日（Q1 4/30、H1 8/31、Q3 10/31、年报次年 4/30）"
+                            "才进入打分——宁可晚用不可早用，因此不会偷看未来，但会漏掉提前披露的信息量。"
+                            "ROE 是年内累计值 ×4/季度序号 的年化近似，只用于横截面排序，不代表真实年化回报率。"})
     out.append({"level": "info", "title": "回测 ≠ 未来",
                 "text": "引擎已按 T+1 开盘成交、涨跌停拦截、双边成本计算，但仍无法模拟冲击成本、"
                         "分红除权差异与真实成交队列。实盘收益通常低于回测。"})
@@ -370,9 +384,29 @@ def pipeline(p: dict, job: Job) -> dict:
     job.bump(46, "拉取估值（百度源）")
     pe = rd.fetch_pe(
         codes, use_cache=bool(p.get("use_cache", True)),
-        progress=lambda i, n: job.quiet(46 + 10 * i / max(n, 1), f"拉取估值 {i}/{n}"))
-    panel = rd.to_panel(prices, pe)
+        progress=lambda i, n: job.quiet(46 + 8 * i / max(n, 1), f"拉取估值 {i}/{n}"))
     job.log(f"估值：{len(pe):,} 条 PE-TTM 记录，覆盖 {pe['code'].nunique()} 只")
+
+    job.bump(55, "拉取财报（东财业绩报表，首次 1–2 分钟）")
+    try:
+        fin = rd.fetch_fundamentals(
+            codes, str(close.index[0].date()), str(close.index[-1].date()),
+            use_cache=bool(p.get("use_cache", True)),
+            progress=lambda i, n, period: job.quiet(
+                55 + 9 * i / max(n, 1), f"拉取财报 {period}（{i}/{n} 期）"))
+    except Exception as e:                     # 财报失败不该让整个回测挂掉
+        fin = None
+        job.log(f"财报获取失败（{type(e).__name__}），质量/成长因子按未接入处理")
+    panel = rd.to_panel(prices, pe, fin)
+    meta = panel.get("fin_meta") or {}
+    if fin is not None and len(fin):
+        job.log(f"财报：{fin['period'].nunique()} 期、{fin['code'].nunique()} 只，"
+                f"最新 {meta.get('period')}（{meta.get('avail')} 起可用）")
+        for k, lbl in (("roe_panel", "ROE"), ("growth_panel", "净利同比")):
+            cov = panel[k].notna().sum().sum() / max(panel[k].size, 1)
+            job.log(f"  {lbl} 覆盖率 {cov*100:.0f}%")
+    else:
+        job.log("财报为空：质量/成长因子本次不参与打分")
 
     cfg = Config(top_n=top, capital=float(p.get("capital", 1_000_000)),
                  commission=0.00025 if cost_on else 0.0,
@@ -467,6 +501,7 @@ def pipeline(p: dict, job: Job) -> dict:
         "bias": bias,
         "strength": sig if mode in ("rotation", "both") else None,
         "ranking": rank,
+        "sources": _sources(panel, p),
         "lines": lines,
         "compare": _compare(lines),
         "reports": reports,
@@ -483,6 +518,190 @@ def pipeline(p: dict, job: Job) -> dict:
     job.reports = {k: f"/report?id={job.id}&line={k}" for k in reports}
     job.bump(100, "完成")
     return result
+
+
+def _sources(panel, p: dict) -> list[dict]:
+    """把「数据从哪来、新到哪一天」直接摊在界面上，而不是只写在文档里。"""
+    import pandas as pd
+
+    close, fu = panel["close"], panel["fundamentals"]
+    meta = panel.get("fin_meta") or {}
+    last_td = str(close.index[-1].date())
+    pe_last = ""
+    if len(fu):
+        d = pd.to_datetime(fu["date"], errors="coerce").max()
+        if pd.notna(d):
+            pe_last = min(d.strftime("%Y-%m-%d"), last_td)   # 百度会带周末行，按交易日截断
+    src = [
+        {"k": "行情", "src": "腾讯财经 stock_zh_a_hist_tx", "freq": "日线 · 前复权",
+         "asof": last_td,
+         "note": f"{close.shape[1]} 只 × {len(close)} 个交易日；源端收盘后要 1–2 小时才发布当日 K 线，"
+                 f"所以「今天收盘」之后立刻跑，最后一根可能还是上一个交易日"},
+        {"k": "估值", "src": "百度股市通 stock_zh_valuation_baidu", "freq": "每日 PE(TTM)",
+         "asof": pe_last or "—", "note": "滚动 12 个月口径，按交易日对齐到行情"},
+        {"k": "财报", "src": "东方财富 业绩报表 stock_yjbb_em", "freq": "季度",
+         "asof": meta.get("avail") or "—",
+         "note": (f"最新报告期 {meta.get('period')}，覆盖 {meta.get('codes')} 只；"
+                  f"按法定披露截止日生效（Q1 4/30、H1 8/31、Q3 10/31、年报次年 4/30）"
+                  if meta.get("period") else "本次未取到财报，质量/成长因子未参与打分")},
+        {"k": "退市", "src": "上交所 / 深交所 暂停终止上市名单", "freq": "按需",
+         "asof": datetime.now().strftime("%Y-%m-%d"),
+         "note": "只用于估算存活偏差，不进入选股样本"},
+    ]
+    if p.get("pool") == "custom":
+        src = src[:3] + src[3:]
+    return src
+
+
+def _pack_line(res) -> dict:
+    """压力测试只需要指标，不需要整条净值曲线（省内存）。"""
+    return {k: _f(v) for k, v in res.metrics.items() if k in (
+        "cagr", "excess_cagr", "max_dd", "sharpe", "ann_vol", "ic_mean",
+        "turnover_annual", "bench_cagr", "bench_max_dd")}
+
+
+def stress_pipeline(p: dict, job: Job) -> dict:
+    """压力测试：一个大样本池里反复抽 n 只，看收益分布有多宽。
+
+    要回答的问题是「刚才那个年化 11% 是策略的能力，还是这一百只的运气」。
+    单次回测给不了答案——换一批股票重跑，收益就变了，恰恰说明答案是不确定。
+    所以这里不调参数、不改因子，只换样本，看同一套规则在不同抽样下的分布。
+    """
+    import numpy as np
+    import pandas as pd
+
+    start, end = _s8(p["start"]), _s8(p["end"])
+    if start >= end:
+        raise ValueError("开始日期必须早于结束日期")
+    n = max(5, int(p["n"]))
+    top = max(1, min(int(p["top"]), n))
+    draws = max(3, min(int(p.get("draws", 12)), 30))
+    base = int(p.get("seed", 42))
+    pool_size = int(p.get("pool_size") or min(600, max(300, n * 4)))
+    pool_size = max(pool_size, n)
+
+    job.bump(4, f"准备大样本池 {pool_size} 只")
+    if p.get("pool") == "custom":
+        own = [c.strip().zfill(6) for c in
+               (p.get("codes") or "").replace("，", ",").split(",") if c.strip()]
+        if len(own) >= n:
+            codes = list(dict.fromkeys(own))
+            job.log(f"用自定义池 {len(codes)} 只做抽样母体")
+        else:
+            codes = rd.universe(pool_size, seed=base)
+    else:
+        codes = rd.universe(pool_size, seed=base)
+    job.log(f"大样本池 {len(codes)} 只；每次抽样 {n} 只、持仓 {top} 只，共抽 {draws} 次")
+
+    job.bump(8, f"拉取行情 {len(codes)} 只（首次约 {len(codes) * 0.45:.0f} 秒）")
+    prices = rd.fetch_prices(codes, start, end, use_cache=bool(p.get("use_cache", True)),
+                             progress=lambda i, m: job.quiet(
+                                 8 + 42 * i / max(m, 1), f"拉取行情 {i}/{m}"))
+    job.log(f"行情：{prices['close'].shape[1]} 只 × {len(prices['close'])} 个交易日")
+
+    job.bump(52, "拉取估值")
+    pe = rd.fetch_pe(codes, use_cache=bool(p.get("use_cache", True)),
+                     progress=lambda i, m: job.quiet(52 + 8 * i / max(m, 1), f"拉取估值 {i}/{m}"))
+    job.bump(61, "拉取财报")
+    try:
+        fin = rd.fetch_fundamentals(codes, start, end, use_cache=bool(p.get("use_cache", True)),
+                                    progress=lambda i, m, period: job.quiet(
+                                        61 + 8 * i / max(m, 1), f"拉取财报 {period}"))
+    except Exception as e:
+        fin = None
+        job.log(f"财报获取失败（{type(e).__name__}），本次只用价值+动量因子")
+    panel = rd.to_panel(prices, pe, fin)
+
+    cfg0 = Config(top_n=top, capital=float(p.get("capital", 1_000_000)),
+                  commission=0.00025 if p.get("cost", True) else 0.0,
+                  stamp_tax=0.0005 if p.get("cost", True) else 0.0,
+                  slippage=0.001 if p.get("cost", True) else 0.0)
+    cfg0.start, cfg0.end = str(panel["close"].index[0].date()), str(panel["close"].index[-1].date())
+
+    rows = []
+    for k in range(draws):
+        rng = np.random.default_rng(base + 1000 * (k + 1))
+        pick = sorted(rng.choice(codes, size=min(n, len(codes)), replace=False).tolist())
+        sub = {kk: (v[pick] if isinstance(v, pd.DataFrame) and kk != "fundamentals" else v)
+               for kk, v in panel.items()}
+        sub["fundamentals"] = panel["fundamentals"][panel["fundamentals"]["code"].isin(pick)]
+        sub["fin_meta"] = panel.get("fin_meta")
+        try:
+            res = run(sub, cfg0)
+            m = _pack_line(res)
+            rows.append({"draw": k + 1, **m})
+            job.bump(69 + int(28 * (k + 1) / draws),
+                     f"第 {k + 1}/{draws} 次抽样：年化 {(m.get('cagr') or 0) * 100:.1f}%")
+        except Exception as e:
+            job.log(f"第 {k + 1} 次抽样失败：{type(e).__name__}: {e}")
+
+    if not rows:
+        raise RuntimeError("所有抽样都失败了，检查数据是否取到")
+
+    df = pd.DataFrame(rows)
+    cagr = df["cagr"].dropna()
+    exc = df["excess_cagr"].dropna()
+    q = lambda s, qq: _f(float(np.percentile(s, qq))) if len(s) else None
+    stats = {
+        "cagr_mean": _f(float(cagr.mean())), "cagr_med": _f(float(cagr.median())),
+        "cagr_p10": q(cagr, 10), "cagr_p90": q(cagr, 90),
+        "cagr_min": _f(float(cagr.min())), "cagr_max": _f(float(cagr.max())),
+        "cagr_std": _f(float(cagr.std(ddof=1))) if len(cagr) > 1 else None,
+        "excess_med": _f(float(exc.median())) if len(exc) else None,
+        "excess_pos_pct": _f(float((exc > 0).mean())) if len(exc) else None,
+        "dd_worst": _f(float(df["max_dd"].min())),
+        "dd_med": _f(float(df["max_dd"].median())),
+        "sharpe_med": _f(float(df["sharpe"].median())),
+        "ic_med": _f(float(df["ic_mean"].median())) if df["ic_mean"].notna().any() else None,
+        "draws": len(rows),
+    }
+    job.log(f"{len(rows)} 次抽样：年化中位 {stats['cagr_med'] * 100:.2f}%、"
+            f"最差 {stats['cagr_min'] * 100:.2f}%、最好 {stats['cagr_max'] * 100:.2f}%")
+
+    out = {
+        "kind": "stress",
+        "params": p,
+        "pool": {"size": len(codes), "n": n, "top": top, "draws": len(rows),
+                 "first": str(panel["close"].index[0].date()),
+                 "last": str(panel["close"].index[-1].date()),
+                 "days": int(len(panel["close"]))},
+        "rows": rows,
+        "stats": stats,
+        "sources": _sources(panel, p),
+    }
+    out["caveats"] = _stress_caveats(out)
+    job.dir.mkdir(parents=True, exist_ok=True)
+    df.to_csv(job.dir / "stress.csv", index=False, encoding="utf-8-sig")
+    job.bump(100, "完成")
+    return out
+
+
+def _stress_caveats(r: dict) -> list[dict]:
+    st, pool = r["stats"], r["pool"]
+    spread = (st["cagr_p90"] - st["cagr_p10"]) if st.get("cagr_p90") is not None else None
+    out = []
+    if spread is not None:
+        out.append({
+            "level": "warn", "title": "收益分布有多宽，就是「运气」有多大",
+            "text": f"{pool['draws']} 次抽样的年化落在 {st['cagr_p10']*100:.1f}% ~ "
+                    f"{st['cagr_p90']*100:.1f}%（中间 80%）之间，极差 "
+                    f"{(st['cagr_max']-st['cagr_min'])*100:.1f} 个百分点。"
+                    f"同一套规则、同一个区间，只换一批股票就差这么多——"
+                    f"所以单次回测的高收益，必须先扣掉这个区间才谈得上「有效」。"})
+    if st.get("excess_pos_pct") is not None:
+        out.append({
+            "level": "ok" if st["excess_pos_pct"] > 0.7 else "warn",
+            "title": "跑赢等权基准的比例",
+            "text": f"{st['draws']} 次里有 {st['excess_pos_pct']*100:.0f}% 跑赢等权基准，"
+                    f"超额中位数 {st['excess_med']*100:+.1f}%。"
+                    f"这个比例高说明信号方向可能真；接近 50% 就说明只是抽到了好年份。"
+        })
+    out.append({
+        "level": "info", "title": "这不是换种子，是换样本",
+        "text": f"大样本池是 {pool['size']} 只，每次从里面抽 {pool['n']} 只，"
+                f"所以这里量到的是「抽样运气」的下界——真正的全 A 股抽样波动会比这更宽。"
+                f"别把区间的中位数当成预期收益。"})
+    return out
 
 
 def _dump_csv(job: Job, res, rank: dict | None = None) -> None:
@@ -502,7 +721,8 @@ def _dump_csv(job: Job, res, rank: dict | None = None) -> None:
 
 def _worker(job: Job) -> None:
     try:
-        job.result = pipeline(job.params, job)
+        fn = stress_pipeline if job.kind == "stress" else pipeline
+        job.result = fn(job.params, job)
         job.status = "done"
     except Exception as e:
         job.status = "error"
@@ -576,7 +796,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(fp, "text/html; charset=utf-8")
         if path.startswith("/api/export"):
             jid, kind = q.get("id", ""), q.get("kind", "trades")
-            if kind not in ("trades", "holdings", "nav", "ranking"):
+            if kind not in ("trades", "holdings", "nav", "ranking", "stress"):
                 return self._json({"error": "不支持的导出类型"}, 400)
             fp = JOBS / jid / f"{kind}.csv"
             if not fp.exists():
@@ -613,6 +833,15 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/run":
             params = _normalize(body)
             job = Job(params)
+            with _LOCK:
+                _JOBS[job.id] = job
+            threading.Thread(target=_worker, args=(job,), daemon=True).start()
+            return self._json({"id": job.id})
+        if u.path == "/api/stress":
+            params = _normalize(body)
+            params["draws"] = int(body.get("draws", 12))
+            params["pool_size"] = int(body.get("pool_size", 0))
+            job = Job(params, kind="stress")
             with _LOCK:
                 _JOBS[job.id] = job
             threading.Thread(target=_worker, args=(job,), daemon=True).start()
@@ -687,7 +916,7 @@ def history() -> list[dict]:
         except Exception:
             continue
         rows.append({
-            "id": d.get("id"), "status": d.get("status"),
+            "id": d.get("id"), "status": d.get("status"), "kind": d.get("kind", "backtest"),
             "finished": d.get("finished"), "params": d.get("params"),
             "headline": d.get("headline"), "reports": d.get("reports"),
         })
