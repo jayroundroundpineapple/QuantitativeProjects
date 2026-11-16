@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.DS_Store
+
+# 缓存数据体积大且可重生成，不入库
+data/cache/
+data/*.pkl
+data/*.parquet
+
+# 本地虚拟环境
+.venv/
+venv/
