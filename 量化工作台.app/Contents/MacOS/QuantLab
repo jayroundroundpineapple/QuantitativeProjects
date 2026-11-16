@@ -1,0 +1,39 @@
+#!/bin/bash
+# 量化工作台启动器：双击 .app 即可，不需要打开终端。
+# 逻辑：找可用的 Python（需带 pandas/numpy/akshare）→ 若服务已在跑就直接开浏览器 → 否则启动服务。
+
+set -u
+HERE="$(cd "$(dirname "$0")" && pwd)"          # .../量化工作台.app/Contents/MacOS
+DIR="$(cd "$HERE/../../.." && pwd)"            # .../quant_lab
+cd "$DIR" || exit 1
+
+PORT=8770
+URL="http://127.0.0.1:$PORT/"
+
+alert() {
+  /usr/bin/osascript -e "display alert \"量化工作台\" message \"$1\"" >/dev/null 2>&1
+}
+
+# 已经开着就直接把窗口叫出来
+if /usr/bin/curl -s -m 1 "${URL}api/health" >/dev/null 2>&1; then
+  /usr/bin/open "$URL"
+  exit 0
+fi
+
+PY=""
+for c in \
+  "/Users/admin/.workbuddy/binaries/python/versions/3.13.12/bin/python3" \
+  "$(command -v python3 2>/dev/null || true)" \
+  "/opt/homebrew/bin/python3" \
+  "/usr/local/bin/python3" \
+  "/usr/bin/python3"; do
+  [ -n "$c" ] && [ -x "$c" ] || continue
+  if "$c" -c "import pandas, numpy, akshare" >/dev/null 2>&1; then PY="$c"; break; fi
+done
+
+if [ -z "$PY" ]; then
+  alert "找不到带 pandas / numpy / akshare 的 Python 环境。\\n请在终端执行一次：\\n/usr/bin/python3 -m pip install pandas numpy akshare"
+  exit 1
+fi
+
+exec "$PY" app/server.py --port "$PORT"

@@ -30,20 +30,29 @@ def sector_index(close: pd.DataFrame, members: list[str]) -> pd.Series:
     return (1 + ret.mean(axis=1).fillna(0)).cumprod()
 
 
-def market_index(close: pd.DataFrame) -> pd.Series:
-    ret = close.pct_change()
+def market_index(close: pd.DataFrame, exclude: list[str] | None = None) -> pd.Series:
+    """全市场等权指数。exclude 用于剔除板块成员——否则当股票池就是板块时，
+    「板块」和「市场」完全相同，相对强度恒为 0，除零后全是 NaN。"""
+    ex = set(exclude or [])
+    cols = [c for c in close.columns if c not in ex]
+    if not cols:                                  # 池子里只剩板块成员，退化为全体
+        cols = list(close.columns)
+    ret = close[cols].pct_change()
     return (1 + ret.mean(axis=1).fillna(0)).cumprod()
 
 
 def strength(close: pd.DataFrame, members: list[str],
              windows: tuple[int, int] = (20, 60)) -> pd.DataFrame:
     """返回每日的 RS 与综合强度分。"""
-    sec, mkt = sector_index(close, members), market_index(close)
+    sec = sector_index(close, members)
+    mkt = market_index(close, exclude=members)
     out = pd.DataFrame(index=close.index)
     for w in windows:
         out[f"rs{w}"] = (sec / sec.shift(w) - 1) - (mkt / mkt.shift(w) - 1)
-    z = out.apply(lambda s: (s - s.expanding(120).mean()) / s.expanding(120).std())
-    out["score"] = 0.5 * z[f"rs{windows[0]}"] + 0.5 * z[f"rs{windows[1]}"]
+    z = out.apply(lambda s: (s - s.expanding(120).mean()) /
+                  s.expanding(120).std().replace(0.0, np.nan))
+    out["score"] = sum(z[f"rs{w}"] for w in windows) / len(windows)
+    out["score"] = out["score"].fillna(0.0)       # 前置窗口不足 / 方差为 0 -> 视为中性
     out["sector"] = sec
     out["market"] = mkt
     return out
@@ -80,7 +89,10 @@ def run_rotation(panel: dict, members: list[str] | None = None,
                if isinstance(v, pd.DataFrame) and k != "fundamentals" else v)
            for k, v in only.items()}
     sector_only = run(sub, Config(top_n=len(members), weights=cfg.weights,
-                                  start=cfg.start, end=cfg.end, capital=cfg.capital))
+                                  start=cfg.start, end=cfg.end, capital=cfg.capital,
+                                  commission=cfg.commission, stamp_tax=cfg.stamp_tax,
+                                  slippage=cfg.slippage, min_price=cfg.min_price,
+                                  lot=cfg.lot))
 
     return {"rotation": rot, "sector_only": sector_only,
             "strength": strength(close, members)}

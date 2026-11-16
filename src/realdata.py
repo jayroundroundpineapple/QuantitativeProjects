@@ -81,7 +81,7 @@ def universe(n: int = 100, seed: int = 42, exclude_st: bool = True) -> list[str]
 
 
 def fetch_prices(codes: list[str], start: str, end: str,
-                 use_cache: bool = True) -> dict:
+                 use_cache: bool = True, progress=None) -> dict:
     import akshare as ak
     from tqdm import tqdm
 
@@ -92,7 +92,9 @@ def fetch_prices(codes: list[str], start: str, end: str,
         return pd.read_pickle(fp)
 
     close, open_, vol = {}, {}, {}
-    for c in tqdm(codes, desc="行情", ncols=70):
+    for i, c in enumerate(tqdm(codes, desc="行情", ncols=70)):
+        if progress:
+            progress(i + 1, len(codes))
         sym = _prefix(c) + c
         for attempt in range(3):
             try:
@@ -127,7 +129,7 @@ def fetch_prices(codes: list[str], start: str, end: str,
     return panel
 
 
-def fetch_pe(codes: list[str], use_cache: bool = True) -> pd.DataFrame:
+def fetch_pe(codes: list[str], use_cache: bool = True, progress=None) -> pd.DataFrame:
     """百度估值：每日 PE(TTM) 历史，用于估值因子。
 
     注意：这是**事后**的每日 PE（含当日收盘价），所以在 t 日调仓要用 t 日的值，
@@ -142,7 +144,9 @@ def fetch_pe(codes: list[str], use_cache: bool = True) -> pd.DataFrame:
         return pd.read_pickle(fp)
 
     rows = []
-    for c in tqdm(codes, desc="估值", ncols=70):
+    for i, c in enumerate(tqdm(codes, desc="估值", ncols=70)):
+        if progress:
+            progress(i + 1, len(codes))
         try:
             df = ak.stock_zh_valuation_baidu(symbol=c, indicator="市盈率(TTM)",
                                             period="近五年")

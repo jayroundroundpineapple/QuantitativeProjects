@@ -11,3 +11,7 @@ data/*.parquet
 # 本地虚拟环境
 .venv/
 venv/
+
+# 每次回测的产物（体积大、可重生成）
+out/jobs/
+out/server*.log

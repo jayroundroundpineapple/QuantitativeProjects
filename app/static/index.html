@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>量化工作台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app">
+
+  <aside>
+    <div class="brand">
+      <b>量化工作台</b>
+      <span class="dot"></span>
+      <span id="ver">v1.0</span>
+    </div>
+
+    <div class="grp">
+      <label>股票池</label>
+      <div class="seg" id="segPool">
+        <button data-v="sample" class="on">随机抽样</button>
+        <button data-v="grid">电网三只</button>
+        <button data-v="custom">自定义</button>
+      </div>
+      <div class="row" id="wrapN">
+        <input type="number" id="n" value="100" min="5" max="800" step="10">
+        <div style="flex:0 0 62px;display:flex;align-items:center;color:var(--t3);font-size:11.5px">只股票</div>
+      </div>
+      <textarea id="codes" placeholder="600312,002028,600089（6 位代码，逗号分隔）" style="display:none"></textarea>
+      <div class="mini" id="poolHint">从当前全部 A 股中按种子抽样，含存活偏差</div>
+    </div>
+
+    <div class="grp">
+      <label>回测区间</label>
+      <div class="row">
+        <input type="date" id="start" value="2021-01-01">
+        <input type="date" id="end" value="">
+      </div>
+    </div>
+
+    <div class="grp">
+      <label>策略</label>
+      <div class="seg" id="segMode">
+        <button data-v="factor">多因子</button>
+        <button data-v="rotation">电网轮动</button>
+        <button data-v="both" class="on">两者</button>
+      </div>
+      <div class="row">
+        <div>
+          <input type="number" id="top" value="20" min="1" max="100">
+          <div class="mini">持仓只数</div>
+        </div>
+        <div>
+          <input type="number" id="seed" value="42" min="0" max="9999">
+          <div class="mini">随机种子</div>
+        </div>
+      </div>
+      <div>
+        <input type="number" id="threshold" value="0" step="0.1">
+        <div class="mini">轮动阈值（强度分 &gt; 阈值才切板块，0 为默认）</div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <label>执行假设</label>
+      <div class="switch on" id="swCost"><span>计入交易成本</span><i></i></div>
+      <div class="switch on" id="swCache"><span>复用本地缓存</span><i></i></div>
+      <div>
+        <input type="number" id="capital" value="1000000" step="100000">
+        <div class="mini">初始资金（A 股一手 100 股，太小会买不进）</div>
+      </div>
+    </div>
+
+    <button class="primary" id="run">开始回测</button>
+    <div class="foot">
+      数据保存在本机 <code style="font-size:10.5px">quant_lab/out/</code><br>
+      回测仅供研究，不构成投资建议
+    </div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <div>
+        <h1 id="title">回测结果</h1>
+        <div class="sub" id="subtitle">在左侧设置参数，然后点击「开始回测」</div>
+      </div>
+      <div class="toolbar">
+        <span class="pill" id="status"><span class="dot"></span>待运行</span>
+        <button class="ghost" id="btnReveal">打开产出目录</button>
+        <button class="ghost" id="btnHistory">历史记录</button>
+      </div>
+    </div>
+
+    <!-- 进度 -->
+    <div class="card" id="progress" style="margin-bottom:16px">
+      <h2>正在运行 <em id="timer"></em></h2>
+      <div id="step">准备中…</div>
+      <div class="bar"><i id="pbar"></i></div>
+      <div id="log"></div>
+    </div>
+
+    <!-- 空状态 -->
+    <div id="empty" class="empty">
+      <div class="big">还没有运行过回测</div>
+      <div>默认参数：100 只 A 股 · 2021 年至今 · 20 只持仓 · 月度调仓</div>
+      <div style="font-size:12px">首次运行需要抓取行情，约 40–90 秒；之后走缓存，几秒出结果</div>
+      <div style="font-size:12px;color:var(--t3)">也可以先把股票池切到 <span class="kbd">电网三只</span> 试一遍</div>
+    </div>
+
+    <!-- 结果 -->
+    <div id="results" style="display:none">
+      <div class="tabs">
+        <button data-tab="overview" class="on">概览</button>
+        <button data-tab="compare">策略对比</button>
+        <button data-tab="yearly">分年度</button>
+        <button data-tab="holdings">持仓与交易</button>
+        <button data-tab="diag">诊断</button>
+        <button data-tab="doc">怎么用</button>
+      </div>
+
+      <div class="pane on" id="pane-overview">
+        <div class="kpis" id="kpis"></div>
+        <div class="card" style="margin-bottom:14px">
+          <h2>净值曲线 <em id="ovMeta"></em></h2>
+          <div class="chips" id="lineChips" style="margin-bottom:10px"></div>
+          <div class="chart" id="chartNav"></div>
+          <div class="legend" id="legendNav"></div>
+        </div>
+        <div class="card">
+          <h2>回撤</h2>
+          <div class="chart" id="chartDD"></div>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-compare">
+        <div class="card" style="margin-bottom:14px">
+          <h2>三条曲线叠加 <em>同一股票池、同一区间</em></h2>
+          <div class="chart" id="chartCmp"></div>
+          <div class="legend" id="legendCmp"></div>
+        </div>
+        <div class="card">
+          <h2>指标对照 <em>横向读，别只看年化</em></h2>
+          <table id="tblCmp"></table>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-yearly">
+        <div class="card" style="margin-bottom:14px">
+          <h2>分年度收益 <em id="yearMeta"></em></h2>
+          <div class="chart" id="chartYear"></div>
+          <div class="legend"><span><i style="background:#e05555"></i>策略</span><span><i style="background:#4f8ff0"></i>基准</span></div>
+        </div>
+        <div class="card">
+          <h2>明细</h2>
+          <table id="tblYear"></table>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-holdings">
+        <div class="card" style="margin-bottom:14px">
+          <h2>期末持仓 <em id="holdMeta"></em></h2>
+          <table id="tblHold"></table>
+        </div>
+        <div class="card">
+          <h2>交易摘要 <em id="tradeMeta"></em></h2>
+          <div class="toolbar">
+            <a class="link" id="dlTrades" href="#">下载交易明细 CSV</a>
+            <a class="link" id="dlHold" href="#">下载持仓 CSV</a>
+            <a class="link" id="dlNav" href="#">下载净值 CSV</a>
+            <a class="link" id="openReport" href="#" target="_blank">打开完整 HTML 报告</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-diag">
+        <div class="card" style="margin-bottom:14px" id="sigCard" style="display:none">
+          <h2>轮动信号 <em id="sigNow"></em></h2>
+          <div class="chart" id="chartSig"></div>
+          <div class="legend"><span><i style="background:#d99a2b"></i>强度分</span><span style="color:var(--t3)">&gt; 0 持板块，&lt; 0 回全市场；灰线为 0 轴，前 120 日窗口不足记为 0</span></div>
+        </div>
+        <div class="card">
+          <h2>这组数字哪里会骗你 <em>先读这里，再看收益</em></h2>
+          <div id="caveats"></div>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-doc">
+        <div class="card doc" id="docBody"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="tip" id="tip"></div>
+<script src="/app.js"></script>
+</body>
+</html>
